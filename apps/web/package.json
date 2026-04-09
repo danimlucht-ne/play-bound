@@ -1,0 +1,18 @@
+{
+  "name": "play-bound-site",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "node scripts/build-legal.mjs",
+    "serve": "node scripts/serve.mjs",
+    "test:static": "node scripts/build-legal.mjs && node scripts/validate-static.mjs",
+    "test:e2e": "playwright test",
+    "test": "npm run test:static && npm run test:e2e"
+  },
+  "dependencies": {
+    "marked": "^15.0.7"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.54.2"
+  }
+}

@@ -1,0 +1,13 @@
+const fs = require('fs');
+const path = require('path');
+const t = fs.readFileSync(path.join(__dirname, '../seed-expanded.js'), 'utf8');
+const wm = t.match(/const SERVERDLE_WORDS = \[([\s\S]*?)\];/);
+const arr = wm[1].match(/"[A-Z]+"/g) || [];
+const words = arr.map((x) => x.slice(1, -1));
+const bad = words.filter((x) => x.length !== 5);
+console.log('word count', words.length, 'non5', bad.length, bad.slice(0, 25));
+const pm = t.match(/const UNSCRAMBLE_PHRASES = \[([\s\S]*?)\];\s*\n\nconst MOVIE_QUOTES/);
+const phrases = (pm[1].match(/phrase:/g) || []).length;
+const mm = t.match(/const MOVIE_QUOTES = \[([\s\S]*?)\];\s*\n\nconst ACHIEVEMENTS/);
+const quotes = (mm[1].match(/quote:/g) || []).length;
+console.log('phrases', phrases, 'quotes', quotes);

@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 400" role="img" aria-label="PlayBound">
+  <defs>
+    <linearGradient id="pb-banner-bg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#0f1419"/>
+      <stop offset="55%" stop-color="#121826"/>
+      <stop offset="100%" stop-color="#151c24"/>
+    </linearGradient>
+    <linearGradient id="pb-banner-accent" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#00ced1"/>
+      <stop offset="100%" stop-color="#2dd4bf"/>
+    </linearGradient>
+  </defs>
+  <rect width="1200" height="400" fill="url(#pb-banner-bg)"/>
+  <rect x="0" y="0" width="1200" height="3" fill="url(#pb-banner-accent)"/>
+  <text x="600" y="188" text-anchor="middle" fill="#e8eef4" font-family="Segoe UI, system-ui, -apple-system, sans-serif" font-size="56" font-weight="700">PlayBound</text>
+  <text x="600" y="248" text-anchor="middle" fill="#7a8fa3" font-family="Segoe UI, system-ui, -apple-system, sans-serif" font-size="22">Game nights in Discord</text>
+</svg>

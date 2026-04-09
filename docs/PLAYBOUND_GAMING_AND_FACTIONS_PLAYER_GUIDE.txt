@@ -1,0 +1,177 @@
+================================================================================
+PLAYBOUND — GAMING & FACTIONS (PLAYER + STAFF QUICK REFERENCE)
+================================================================================
+Also see docs/QUICKSTART.md for channel setup and onboarding-style tips (Markdown).
+This .txt file is meant for pasting into Discord or wikis in one block.
+
+Copy this entire block into Discord, a wiki, or onboarding docs. Line length is
+kept reasonable for pasting into a single message (split if you hit limits).
+
+--------------------------------------------------------------------------------
+A. WHAT PLAYBOUND IS
+--------------------------------------------------------------------------------
+• Discord mini-games, hosted party games, server leaderboard (Credits), and
+  optional global factions with time-limited "wars" per server.
+• Use /help for the in-bot guide and /rules for a short scoring summary.
+
+--------------------------------------------------------------------------------
+B. OFFICIAL PLATFORM GAMES — /playgame
+--------------------------------------------------------------------------------
+WHAT IT IS
+• Starts an official mini-game in a **thread**. One slash = one **match**
+  (some matches include multiple hands/rounds inside that thread).
+• Games are chosen from **today’s rotation** (UTC). If a tag is not in
+  rotation, pick another or wait for the daily refresh.
+• A **featured** game of the day may give extra **casual** rewards; that bonus
+  does **not** change ranked faction war math.
+
+WHERE TO RUN IT
+• A normal server **text** channel that can create **threads** (not DMs).
+
+WHO IS "THE PLAYER"
+• Whoever ran /playgame is the **host** for solo-style games. Some games allow
+  others in the thread to participate (e.g. single-round Reaction Rush); the
+  rules in the thread say which.
+
+LIMITS & SETTINGS
+• Individual games can be **disabled** in bot settings — autocomplete only
+  lists games that are on and (unless staff/dev bypass) in rotation.
+• Maintenance windows may block immediate starts (rare).
+• Dev/staff builds may bypass rotation for testing.
+
+CREDITS (SERVER LEADERBOARD) VS WAR SCORE
+• Each match produces a **base** score. **Credits** on /leaderboard use that
+  base plus streaks, Premium, consumable boosts, host aura, etc.
+• **Faction wars (ranked)** use **base only** for the war ledger — not the
+  boosted Credit number. Premium helps your profile, not the war formula.
+
+HOSTED GAMES (DO NOT COUNT FOR RANKED WARS)
+• Examples: /trivia, /triviasprint, /caption, /unscramble, /moviequotes,
+  /namethattune, /spellingbee, /guessthenumber, /startserverdle, giveaways,
+  /duel (trivia duel), etc.
+• They are for fun and server events. They **never** credit **official ranked**
+  faction wars. Unranked / custom challenges **may** allow some hosted tags if
+  the war is configured that way.
+
+--------------------------------------------------------------------------------
+C. DAILY /playgame POINTS (CREDITS) — CHECK YOUR BUILD
+--------------------------------------------------------------------------------
+• The bot’s /rules text says: unlimited plays, but only the **first 5** starts
+  per UTC day count for **leaderboard points** unless you are in a special
+  "war session" mode (then more may count).
+• Under the hood, builds that wire `countsForPoints` can pass **0** into the
+  score pipeline after the daily threshold so **both** Credits and the number
+  passed into war credit from that finish can be zero for that session.
+• If unsure, run **/rules** on your server and treat that as the product copy;
+  admins can confirm in code: `DAILY_PLAYGAME_LIMIT` in lib/db.js.
+
+--------------------------------------------------------------------------------
+D. GLOBAL FACTIONS — /faction, /factions
+--------------------------------------------------------------------------------
+SIX OFFICIAL TEAMS (GLOBAL)
+• Phoenixes, Unicorns, Fireflies, Dragons, Wolves, Eagles (join via
+  /faction join with autocomplete).
+• /factions = **global** standings driven by **ranked war match points**, not
+  raw grind from every game in every server.
+
+SERVER VS GLOBAL
+• /faction server — ranks factions **in this server** by member **activity
+  points** (Credits-style totals). **Not** the same as /factions.
+• /faction_balance — headcount per faction **in this server**.
+• /faction stats — your global faction info + your footprint **here**.
+• /faction rename and /faction emoji — **display** overrides for this server
+  only (admin/manager).
+
+JOIN / LEAVE / SWITCH
+• /faction join — pick a team. If you were in a war roster, re-enlist with
+  /faction_challenge join after rejoining if needed.
+• /faction leave — clears faction; drops you from war enrollment.
+• /faction switch — **Premium**; **7-day cooldown**; clears war enrollment.
+
+RECRUITING
+• /faction_recruit — get a code (~14 days) to share.
+• /faction_redeem — redeem someone else’s code (same server; rules in-command).
+
+--------------------------------------------------------------------------------
+E. FACTION WARS — /faction_challenge
+--------------------------------------------------------------------------------
+ONE ACTIVE WAR PER SERVER
+• Finish or /faction_challenge end before starting another.
+
+WHO CAN CREATE OR END (TYPICAL RANKED FLOW)
+• **Premium** required for the actor.
+• Plus **Administrator**, **Bot Manager**, or configured **Faction Leader**
+  role (/set_faction_leader_role). Faction Leader does **not** grant other admin
+  powers.
+
+DAILY CREATE LIMIT (RANKED DUEL & ROYALE IN CODE)
+• Current slash flow: at most **3** faction wars **created** per server per
+  **UTC calendar day** (counts challenges created that day, including ended).
+• Constant `DAILY_FACTION_CHALLENGE_CAP` (6) exists in libs for other tooling;
+  the **3/day** gate is what ranked /faction_challenge create uses in code.
+
+RANKED VS UNRANKED
+• **Ranked** (default public create today): affects **global** faction match
+  points when the war ends (win +3, tie +1, loss +0 style summary).
+• **Only /playgame** tags that are ranked-eligible and allowed in the war’s
+  filter can add to the ranked war ledger. **Hosted** games never count.
+• **Unranked** challenges exist in the data model and automation; they are
+  **local** to the server for standings and do not move global match points the
+  same way. Filters may allow hosted games when explicitly configured.
+
+ENROLLMENT — /faction_challenge join
+• You must already be in a faction that is **on the war**.
+• If **max_per_team** (roster cap) is set, only the **first N** joiners per side
+  (or per faction in royale) get spots — then that team is **full**.
+• Scheduled wars: you may only join **after** the announced go-live time.
+
+OFFICIAL RANKED SCORING (CODE-DRIVEN)
+• **Mode:** top **5** average — for each faction, take each **enrolled**
+  player’s **counted** war total, sort high→low, average the top **min(5,
+  roster size)** values. That number decides the winner vs the other side(s).
+• **Per-tag caps** (ranked): server defaults or slash `contribution_caps` can
+  limit how much **counted** score each user can add **per game tag** — raw
+  totals may still show higher in recaps.
+• **Roster cap** and **top-5** together limit "we have 100 members" advantage:
+  only capped roster can score, and only the best five averages drive the
+  official side score.
+
+WAR DURATION & SCHEDULING
+• duration_hours (and optional delay) set the live window; see command options
+  for exact ranges.
+• Optional **point_goal** (unranked-style / legacy docs) — ranked create in
+  code sets no point goal; early end is mainly timer or manual end.
+
+COMMANDS SUMMARY
+• /faction_challenge create — 2-team ranked war (parameters in Discord UI).
+• /faction_challenge create_royale — six-faction ranked royale.
+• /faction_challenge join — enroll to score.
+• /faction_challenge status — live recap.
+• /faction_challenge history — past wars.
+• /faction_challenge end — Premium + manager/leader; finalizes winner/roles.
+
+--------------------------------------------------------------------------------
+F. OTHER USEFUL LIMITS
+--------------------------------------------------------------------------------
+• Hosted games: optional `points` for placements are capped per placement
+  (see MAX_POINTS_PER_PLACEMENT in code — large cap, not infinite).
+• /duel — trivia-only stakes between two users; separate from wars.
+• Economy: /daily, /shop, /pay, /inventory, /equip — private flows where noted.
+
+--------------------------------------------------------------------------------
+G. IN-BOT SHORTCUTS
+--------------------------------------------------------------------------------
+• /help — overview (play, wars, hosted, economy, support).
+• /rules — compact rules (may simplify edge cases; use this doc + /faction_challenge status for wars).
+• /onboarding — first-time tour.
+
+--------------------------------------------------------------------------------
+H. NOTE ON /rules "FAIRNESS" BULLETS
+--------------------------------------------------------------------------------
+The /rules embed is marketing-short. Accurate ranked behavior includes **roster
+caps**, **top-5 average**, and **per-tag contribution caps** — not "no roster
+caps" in code. Use section E above for staff truth.
+
+================================================================================
+END OF PLAYBOUND GAMING & FACTIONS PLAYER GUIDE
+================================================================================
