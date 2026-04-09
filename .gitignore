@@ -1,0 +1,5 @@
+node_modules/
+.env
+active_threads.json
+bot.log
+*.log
