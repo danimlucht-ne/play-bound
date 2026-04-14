@@ -61,7 +61,6 @@ async function main() {
             }
         }
     });
-    const constants = require('./src/bot/constants');
     const { createScheduleHelpers } = require('./src/bot/schedule');
     const { loadGameData } = require('./src/bot/gameData');
     const { createGameEndTriggers } = require('./src/bot/gameEndTriggers');
@@ -98,7 +97,6 @@ async function main() {
         state,
         triggers,
         scheduleGame,
-        ...constants,
     });
 
     registerMessageCreate(client, { state, triggers });

@@ -1,5 +1,7 @@
 'use strict';
 
+const fs = require('node:fs/promises');
+const path = require('node:path');
 const express = require('express');
 const {
     User,
@@ -14,6 +16,7 @@ const {
     GamePlatformDay,
     GamePlatformDailyStats,
     GamePlatformAuditLog,
+    LegalPolicyConfig,
 } = require('../../../models');
 const factionSeasons = require('../../../lib/factionSeasons');
 const { getGameSchedulingDenialMessage } = require('../../../lib/maintenanceScheduling');
@@ -52,8 +55,26 @@ const { ensureRotationForDate, setManualDayOverride, utcDayString } = require('.
 const { getAnalyticsRange } = require('../../../lib/gamePlatform/analytics');
 const { previewPlatformScore } = require('../../../lib/gamePlatform/scoring');
 const { GAME_REGISTRY, PLATFORM_GAME_TAGS } = require('../../../lib/gamePlatform/registry');
+const mongoRouter = require('../../../lib/mongoRouter');
+const {
+    LEGAL_POLICY_DOC_ID,
+    getLegalPolicyAdminSnapshot,
+    invalidateLegalVersionCache,
+} = require('../../../lib/legalPolicyVersions');
 
 const DAY_MS = 86400000;
+
+/**
+ * @param {unknown} v
+ * @param {string} field
+ * @returns {{ ok: true, value: string } | { ok: false, error: string }}
+ */
+function parseLegalVersionField(v, field) {
+    const s = String(v ?? '').trim();
+    if (!s || s.length > 64) return { ok: false, error: `invalid_${field}` };
+    if (!/^[\w.-]+$/.test(s)) return { ok: false, error: `invalid_${field}` };
+    return { ok: true, value: s };
+}
 
 function clampLimit(n, def = 50, max = 100) {
     const x = parseInt(String(n), 10);
@@ -661,64 +682,6 @@ function createAdminPanelRouter() {
         }
     });
 
-    // ── Channel Assignments ──
-    router.get('/channels', async (req, res) => {
-        const acc = requireGuildAccess(req, req.query.guildId);
-        if (!acc.ok) return res.status(acc.status).json(acc.body);
-        const { guildId } = acc;
-        try {
-            const { client } = req.app.locals.playbound || {};
-            const config = await SystemConfig.findOne({ guildId }).lean();
-            const guild = client?.guilds?.cache?.get(guildId);
-            const channels = [];
-            if (guild) {
-                guild.channels.cache.forEach((ch) => {
-                    if (ch.isTextBased() && !ch.isThread()) {
-                        channels.push({ id: ch.id, name: ch.name });
-                    }
-                });
-                channels.sort((a, b) => a.name.localeCompare(b.name));
-            }
-            res.json({
-                channels,
-                assignments: {
-                    announceChannel: config?.announceChannel || null,
-                    welcomeChannel: config?.welcomeChannel || null,
-                    birthdayChannel: config?.birthdayChannel || null,
-                    achievementChannel: config?.achievementChannel || null,
-                    leaderboardChannel: config?.leaderboardChannel || null,
-                    storyChannel: config?.storyChannel || null,
-                },
-            });
-        } catch (e) {
-            console.error('[API] GET /api/admin/channels', e);
-            res.status(500).json({ error: 'channels_unavailable' });
-        }
-    });
-
-    router.patch('/channels', async (req, res) => {
-        const acc = requireGuildAccess(req, req.body?.guildId);
-        if (!acc.ok) return res.status(acc.status).json(acc.body);
-        const { guildId } = acc;
-        try {
-            const updates = req.body?.updates || {};
-            const allowed = ['announceChannel', 'welcomeChannel', 'birthdayChannel', 'achievementChannel', 'leaderboardChannel', 'storyChannel'];
-            const $set = {};
-            for (const key of allowed) {
-                if (key in updates) {
-                    $set[key] = updates[key] || null;
-                }
-            }
-            if (Object.keys($set).length) {
-                await SystemConfig.findOneAndUpdate({ guildId }, { $set }, { upsert: true });
-            }
-            res.json({ ok: true });
-        } catch (e) {
-            console.error('[API] PATCH /api/admin/channels', e);
-            res.status(500).json({ error: 'channels_save_failed' });
-        }
-    });
-
     router.post('/games/end', async (req, res) => {
         const acc = requireGuildAccess(req, req.body?.guildId);
         if (!acc.ok) return res.status(acc.status).json(acc.body);
@@ -1308,6 +1271,119 @@ function createAdminPanelRouter() {
             return res.status(403).json({ error: 'developer_only' });
         }
         res.json({ games: PLATFORM_GAME_TAGS.map((t) => GAME_REGISTRY[t]), cachedAt: new Date().toISOString() });
+    });
+
+    router.get('/legal-policy', async (req, res) => {
+        if (!req.pbSession.isDeveloper) {
+            return res.status(403).json({ error: 'developer_only' });
+        }
+        try {
+            const snap = await mongoRouter.runWithForcedModels(mongoRouter.getModelsProd(), () =>
+                getLegalPolicyAdminSnapshot(),
+            );
+            res.json({
+                ...snap,
+                staticPublishAvailable: Boolean(req.app.locals.playboundPublicDir),
+                cachedAt: new Date().toISOString(),
+            });
+        } catch (e) {
+            console.error('[API] GET /api/admin/legal-policy', e);
+            res.status(500).json({ error: 'legal_policy_unavailable' });
+        }
+    });
+
+    const LEGAL_HTML_MAX = 1_500_000;
+
+    router.post('/legal-policy/html', async (req, res) => {
+        if (!req.pbSession.isDeveloper) {
+            return res.status(403).json({ error: 'developer_only' });
+        }
+        const root = req.app.locals.playboundPublicDir;
+        if (!root || typeof root !== 'string') {
+            return res.status(400).json({ error: 'public_dir_not_configured' });
+        }
+        const termsHtml = req.body?.termsHtml != null ? String(req.body.termsHtml) : '';
+        const privacyHtml = req.body?.privacyHtml != null ? String(req.body.privacyHtml) : '';
+        if (!termsHtml.trim() && !privacyHtml.trim()) {
+            return res.status(400).json({ error: 'terms_or_privacy_html_required' });
+        }
+        if (termsHtml.length > LEGAL_HTML_MAX || privacyHtml.length > LEGAL_HTML_MAX) {
+            return res.status(400).json({ error: 'html_too_large' });
+        }
+        try {
+            const written = [];
+            if (termsHtml.trim()) {
+                await fs.writeFile(path.join(root, 'terms.html'), termsHtml, 'utf8');
+                written.push('terms.html');
+            }
+            if (privacyHtml.trim()) {
+                await fs.writeFile(path.join(root, 'privacy.html'), privacyHtml, 'utf8');
+                written.push('privacy.html');
+            }
+            logAdmin(req.pbSession.discordUserId, 'legal-policy/html', written.join(','));
+            res.json({ ok: true, written, publicDir: root });
+        } catch (e) {
+            console.error('[API] POST /api/admin/legal-policy/html', e);
+            res.status(500).json({ error: 'legal_html_write_failed', message: e.message || String(e) });
+        }
+    });
+
+    router.post('/legal-policy', async (req, res) => {
+        if (!req.pbSession.isDeveloper) {
+            return res.status(403).json({ error: 'developer_only' });
+        }
+        const t = parseLegalVersionField(req.body?.termsVersion, 'termsVersion');
+        const p = parseLegalVersionField(req.body?.privacyVersion, 'privacyVersion');
+        if (!t.ok) return res.status(400).json({ error: t.error });
+        if (!p.ok) return res.status(400).json({ error: p.error });
+        try {
+            await mongoRouter.runWithForcedModels(mongoRouter.getModelsProd(), async () => {
+                await LegalPolicyConfig.findByIdAndUpdate(
+                    LEGAL_POLICY_DOC_ID,
+                    {
+                        $set: {
+                            termsVersion: t.value,
+                            privacyVersion: p.value,
+                            updatedByDiscordUserId: req.pbSession.discordUserId,
+                        },
+                    },
+                    { upsert: true, new: true, setDefaultsOnInsert: true },
+                );
+            });
+            invalidateLegalVersionCache();
+            logAdmin(
+                req.pbSession.discordUserId,
+                'legal-policy/update',
+                `terms=${t.value} privacy=${p.value}`,
+            );
+            const snap = await mongoRouter.runWithForcedModels(mongoRouter.getModelsProd(), () =>
+                getLegalPolicyAdminSnapshot(),
+            );
+            res.json({ ok: true, ...snap });
+        } catch (e) {
+            console.error('[API] POST /api/admin/legal-policy', e);
+            res.status(500).json({ error: 'legal_policy_save_failed', message: e.message || String(e) });
+        }
+    });
+
+    router.delete('/legal-policy', async (req, res) => {
+        if (!req.pbSession.isDeveloper) {
+            return res.status(403).json({ error: 'developer_only' });
+        }
+        try {
+            await mongoRouter.runWithForcedModels(mongoRouter.getModelsProd(), async () => {
+                await LegalPolicyConfig.deleteOne({ _id: LEGAL_POLICY_DOC_ID });
+            });
+            invalidateLegalVersionCache();
+            logAdmin(req.pbSession.discordUserId, 'legal-policy/delete', 'revert_to_code_defaults');
+            const snap = await mongoRouter.runWithForcedModels(mongoRouter.getModelsProd(), () =>
+                getLegalPolicyAdminSnapshot(),
+            );
+            res.json({ ok: true, ...snap });
+        } catch (e) {
+            console.error('[API] DELETE /api/admin/legal-policy', e);
+            res.status(500).json({ error: 'legal_policy_delete_failed', message: e.message || String(e) });
+        }
     });
 
     return router;

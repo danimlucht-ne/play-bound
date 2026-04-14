@@ -55,7 +55,11 @@ function createAdminAdjustmentsRouter() {
                     return { id, name: g?.name ? String(g.name) : `Server ${id}` };
                 })
                 .sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: 'base' }));
-            res.json({ guilds, cachedAt: new Date().toISOString() });
+            res.json({
+                guilds,
+                isDeveloper: Boolean(req.pbSession.isDeveloper),
+                cachedAt: new Date().toISOString(),
+            });
         } catch (e) {
             console.error('[API] GET /api/admin/guilds', e);
             res.status(500).json({ error: 'guilds_unavailable' });

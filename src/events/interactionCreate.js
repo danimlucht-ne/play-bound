@@ -45,9 +45,6 @@ const {
     pickChallengeWinner,
     expireStaleChallenges,
     getActiveChallenge,
-    getActiveChallengeForFaction,
-    getAllActiveChallenges,
-    checkFactionOverlap,
     isRoyale,
     getParticipantIds,
     isRosterFullForFaction,
@@ -65,15 +62,17 @@ const {
     isUserEnrolledInActiveFactionChallenge,
     formatChallengeGameFilterLabel,
     applyEndedChallengeToGlobalTotals,
-    teamNames,
 } = require('../../lib/factionChallenge');
 const { grantWarEndPersonalCredits } = require('../../lib/factionWarEconomyPayout');
 const {
     validateChallengeCreateParams,
+    rankedDefaultRosterCapFromConfig,
+    rankedContributionCapsFromConfig,
     RANKED_FIXED_SCORING_MODE,
     RANKED_FIXED_TOP_N,
     RANKED_SCORING_DISPLAY_LABEL,
     RANKED_SLASH_CREATE_WAR_VERSION,
+    parseContributionCapsCsv,
 } = require('../../lib/rankedFactionWar');
 const {
     isGuildExcludedFromGlobalCounts,
@@ -109,14 +108,12 @@ const {
     endActiveGame,
 } = require('../../lib/db');
 const { recordFactionJoined } = require('../../lib/onboardingService');
-const { syncGameScores } = require('../../lib/gameScoreSync');
 
 const {
     sendGlobalAnnouncement,
     announceScheduledGame,
     announceWinner,
     announceFactionChallengeToGuild,
-    announceFactionWarToFactionChannels,
     shouldPingEveryone,
 } = require('../../lib/announcements');
 const { automatedServerPostsEnabled } = require('../../lib/automatedPosts');
@@ -153,7 +150,6 @@ const { canManageFactionChallenges } = require('../../lib/guildFactionPermission
 const { playboundDebugLog } = require('../../lib/playboundDebug');
 const { postSupportPanels } = require('../../lib/supportPanels');
 const { syncFactionMemberRoles, getFactionDisplayName, getFactionDisplayEmoji, formatFactionDualLabel } = require('../../lib/factionGuild');
-const { ensureFactionRole, ensureFactionChannel } = require('../../lib/factionProvisioning');
 const { executeFactionRoleLink } = require('../../lib/faction_role_link');
 const { executeFactionRename } = require('../../lib/faction_rename');
 const { executeFactionEmoji } = require('../../lib/faction_emoji');
@@ -515,13 +511,30 @@ function userHasCurrentAgreements(user, termsVer, privacyVer) {
     return t === String(termsVer).trim() && p === String(privacyVer).trim();
 }
 
+/**
+ * @param {object} deps
+ * @returns {Promise<{ termsVersion: string, privacyVersion: string, source?: string }>}
+ */
+async function resolveLegalVersionsForDeps(deps) {
+    if (typeof deps.resolveLegalVersions === 'function') {
+        return deps.resolveLegalVersions();
+    }
+    if (deps.CURRENT_TERMS_VERSION != null && deps.CURRENT_PRIVACY_VERSION != null) {
+        return {
+            termsVersion: deps.CURRENT_TERMS_VERSION,
+            privacyVersion: deps.CURRENT_PRIVACY_VERSION,
+            source: 'deps',
+        };
+    }
+    const { getEffectiveLegalVersions } = require('../../lib/legalPolicyVersions');
+    return getEffectiveLegalVersions();
+}
+
 function registerInteractionCreate(client, deps) {
     const {
         state,
         triggers,
         scheduleGame,
-        CURRENT_TERMS_VERSION,
-        CURRENT_PRIVACY_VERSION,
     } = deps;
 
     const {
@@ -670,12 +683,13 @@ function registerInteractionCreate(client, deps) {
                     process.env.SUPPORT_SERVER_ID &&
                     interaction.guildId === process.env.SUPPORT_SERVER_ID &&
                     (interaction.member?.permissions?.has('Administrator') || isBotDeveloper(interaction.user.id));
-                if (!bootstrapOnSupport && !userHasCurrentAgreements(user, CURRENT_TERMS_VERSION, CURRENT_PRIVACY_VERSION)) {
+                const legal = await resolveLegalVersionsForDeps(deps);
+                if (!bootstrapOnSupport && !userHasCurrentAgreements(user, legal.termsVersion, legal.privacyVersion)) {
                     const embed = new EmbedBuilder()
                         .setColor('#FFA500')
                         .setTitle('📜 Agreements Required')
                         .setDescription(`To use PlayBound, please review and accept our updated **Terms of Service** and **Privacy Policy**.\n\n[View Terms of Service](https://play-bound.com/terms.html)\n[View Privacy Policy](https://play-bound.com/privacy.html)\n\nClick the button below to agree and continue.`)
-                        .setFooter({ text: `Terms v${CURRENT_TERMS_VERSION} | Privacy v${CURRENT_PRIVACY_VERSION}` });
+                        .setFooter({ text: `Terms v${legal.termsVersion} | Privacy v${legal.privacyVersion}` });
 
                     const row = new ActionRowBuilder().addComponents(
                         new ButtonBuilder().setCustomId('accept_agreements').setLabel('Accept & Continue').setStyle(ButtonStyle.Success)
@@ -695,9 +709,10 @@ function registerInteractionCreate(client, deps) {
         }
         await interaction.deferReply({ flags: [MessageFlags.Ephemeral] });
         try {
+            const legalAccept = await resolveLegalVersionsForDeps(deps);
             await updateUser(guildId, interaction.user.id, u => {
-                u.agreedTermsVersion = CURRENT_TERMS_VERSION;
-                u.agreedPrivacyVersion = CURRENT_PRIVACY_VERSION;
+                u.agreedTermsVersion = legalAccept.termsVersion;
+                u.agreedPrivacyVersion = legalAccept.privacyVersion;
                 u.agreedTermsAt = new Date();
                 u.agreedPrivacyAt = new Date();
             });
@@ -750,7 +765,6 @@ function registerInteractionCreate(client, deps) {
                 p.score += p.currentHint ? 0.5 : 1;
                 p.qIndex++;
                 p.currentHint = false;
-                syncGameScores(activeUnscramble.threadId, activeUnscramble);
 
                 if (p.qIndex >= activeUnscramble.totalRounds) {
                     p.timeTaken = Date.now() - p.startTime;
@@ -1201,7 +1215,9 @@ if (interaction.isButton()) {
                 }
                 
                 await interaction.editReply({ content: `${f}\n\n**Q${p.qIndex+1}**\n\n**${nq.question}**`, components: [row] });
-                syncGameScores(activeSprint.threadId, activeSprint);
+                updateActiveGame(activeSprint.threadId, state => {
+                    state.players[interaction.user.id] = p;
+                });
                 return;
             }
         } catch (e) {
@@ -1545,7 +1561,7 @@ if (interaction.isButton()) {
         return;
     }
 
-    const adminCommands = ['set_announcement_channel', 'set_announce_everyone', 'set_automated_posts', 'set_welcome_channel', 'add_welcome_message', 'remove_welcome_message', 'list_welcome_messages', 'set_birthday_channel', 'add_birthday_message', 'remove_birthday_message', 'list_birthday_messages', 'set_achievement_channel', 'set_leaderboard_channel', 'set_leaderboard_cadence', 'set_faction_reminder_channel', 'set_faction_victory_role', 'set_faction_challenge_defaults', 'set_story_channel', 'set_member_log_channel', 'story_export', 'set_manager_role', 'set_member_game_hosts', 'set_auto_role', 'remove_auto_role', 'sync_auto_role', 'strip_role', 'schedule_announcement', 'adjustpoints', 'add_redirect', 'remove_redirect', 'endgame', 'wipe_leaderboard', 'giveaway', 'guessthenumber', 'playgame', 'startserverdle', 'trivia', 'triviasprint', 'namethattune', 'spellingbee', 'moviequotes', 'caption', 'unscramble', 'leaderboard', 'set_role_reward', 'achievement', 'tournament', 'faction_role_link', 'faction_rename', 'faction_emoji'];
+    const adminCommands = ['set_announcement_channel', 'set_announce_everyone', 'set_automated_posts', 'set_welcome_channel', 'add_welcome_message', 'remove_welcome_message', 'list_welcome_messages', 'set_birthday_channel', 'add_birthday_message', 'remove_birthday_message', 'list_birthday_messages', 'set_achievement_channel', 'set_leaderboard_channel', 'set_leaderboard_cadence', 'set_faction_reminder_channel', 'set_faction_victory_role', 'set_faction_challenge_defaults', 'set_faction_ranked_rules', 'set_story_channel', 'story_export', 'set_manager_role', 'set_member_game_hosts', 'set_auto_role', 'remove_auto_role', 'sync_auto_role', 'strip_role', 'schedule_announcement', 'adjustpoints', 'add_redirect', 'remove_redirect', 'endgame', 'wipe_leaderboard', 'giveaway', 'guessthenumber', 'playgame', 'startserverdle', 'trivia', 'triviasprint', 'namethattune', 'spellingbee', 'moviequotes', 'caption', 'unscramble', 'leaderboard', 'set_role_reward', 'achievement', 'tournament', 'faction_role_link', 'faction_rename', 'faction_emoji'];
     /** When `allowMemberHostedGames` is on, regular members may start these (spam/abuse risk — use with channel slowmode). */
     const MEMBER_HOSTABLE_GAME_COMMANDS = [
         'giveaway',
@@ -1868,17 +1884,6 @@ if (interaction.isButton()) {
         await interaction.reply({ content: `One-Word Story mode enabled in <#${channel.id}>!`, ephemeral: true });
     }
 
-    if (interaction.commandName === 'set_member_log_channel') {
-        const channel = interaction.options.getChannel('channel');
-        if (channel) {
-            await updateSystemConfig(guildId, c => c.memberLogChannel = channel.id);
-            await interaction.reply({ content: `\u2705 Member join/leave log set to <#${channel.id}>.`, ephemeral: true });
-        } else {
-            await updateSystemConfig(guildId, c => c.memberLogChannel = null);
-            await interaction.reply({ content: '\u2705 Member log channel disabled.', ephemeral: true });
-        }
-    }
-
     if (interaction.commandName === 'story_export') {
         const config = await getSystemConfig(guildId);
         if (!config.storyChannel) {
@@ -2024,6 +2029,91 @@ if (interaction.isButton()) {
                 `• **game_type** \`${r.gameType}\`\n` +
                 `• **scoring_mode** \`${r.scoringMode}\`\n` +
                 `• **top_n** **${r.topN}**`,
+            ephemeral: true,
+        });
+    }
+
+    if (interaction.commandName === 'set_faction_ranked_rules') {
+        const cfgRank = await getSystemConfig(guildId);
+        const isOwnerRank = interaction.member && interaction.member.permissions.has('Administrator');
+        const hasManagerRank = cfgRank.managerRoleId && interaction.member && interaction.member.roles.cache.has(cfgRank.managerRoleId);
+        if (!isOwnerRank && !hasManagerRank) {
+            return interaction.reply({
+                content: '❌ You need **Administrator** or the **Bot Manager** role.',
+                ephemeral: true,
+            });
+        }
+        const clearRank = interaction.options.getBoolean('clear') === true;
+        const rosterOpt = interaction.options.getInteger('default_roster_cap');
+        const capsStr = interaction.options.getString('contribution_caps');
+
+        if (clearRank) {
+            await updateSystemConfig(guildId, (c) => {
+                c.factionRankedDefaultRosterCap = null;
+                c.factionRankedContributionCapsByTag = null;
+            });
+            return interaction.reply({
+                content:
+                    '✅ Cleared **ranked** defaults (contribution caps and any saved roster hint). New wars have **no** roster cap unless you set **max_per_team** on each `/faction_challenge` create.',
+                ephemeral: true,
+            });
+        }
+
+        if (rosterOpt == null && (capsStr == null || !String(capsStr).trim())) {
+            const rc = cfgRank.factionRankedDefaultRosterCap;
+            const caps = cfgRank.factionRankedContributionCapsByTag;
+            const rosterShow =
+                rc != null && Number.isFinite(Number(rc))
+                    ? `**${String(rc)}** _(stored only; use \`max_per_team\` on each war to enforce a cap)_`
+                    : '_not set_';
+            const capsShow =
+                caps && typeof caps === 'object' && Object.keys(caps).length
+                    ? Object.entries(caps)
+                          .map(([k, v]) => `${k}:${v}`)
+                          .join(', ')
+                    : '_none_';
+            return interaction.reply({
+                content:
+                    `**Official ranked war defaults** (this server):\n` +
+                    `• **contribution_caps** (counted per tag): ${capsShow}\n` +
+                    `• **default_roster_cap** (legacy field): ${rosterShow}\n\n` +
+                    `_Roster limits are optional — set **max_per_team** on \`/faction_challenge create\` when you want one._\n` +
+                    `Set options or **clear:true** to reset.`,
+                ephemeral: true,
+            });
+        }
+
+        if (rosterOpt != null && (rosterOpt < 1 || rosterOpt > 25)) {
+            return interaction.reply({ content: '❌ **default_roster_cap** must be between **1** and **25**.', ephemeral: true });
+        }
+
+        await updateSystemConfig(guildId, (c) => {
+            if (rosterOpt != null) c.factionRankedDefaultRosterCap = rosterOpt;
+            if (capsStr != null && String(capsStr).trim()) {
+                const parsed = parseContributionCapsCsv(capsStr);
+                c.factionRankedContributionCapsByTag = parsed && Object.keys(parsed).length ? parsed : null;
+            }
+        });
+
+        const cfgAfter = await getSystemConfig(guildId);
+        const rosterOut = rankedDefaultRosterCapFromConfig(cfgAfter);
+        const capsOut = rankedContributionCapsFromConfig(cfgAfter);
+        const capsLine =
+            capsOut && Object.keys(capsOut).length
+                ? Object.entries(capsOut)
+                      .map(([k, v]) => `${k}:${v}`)
+                      .join(', ')
+                : 'none';
+        const rosterAck =
+            rosterOpt != null
+                ? `• **default_roster_cap**: **${rosterOut}** _(stored; use **max_per_team** on each \`/faction_challenge create\` to enforce it)_\n`
+                : '';
+        return interaction.reply({
+            content:
+                `✅ **Ranked war defaults** updated.\n` +
+                rosterAck +
+                `• Contribution caps (counted score per tag): ${capsLine}\n` +
+                `_Contribution caps apply to **official ranked** wars._`,
             ephemeral: true,
         });
     }
@@ -2927,44 +3017,25 @@ if (interaction.isButton()) {
         return handleInviteLeaderboardCommand(interaction, client);
     }
 
-    if (interaction.commandName === 'help') {
-        const invite = process.env.SUPPORT_SERVER_INVITE;
-        const e = new EmbedBuilder().setColor('#0099ff').setTitle('\ud83c\udfae PlayBound Guide')
+    if (interaction.commandName === 'help') {        const invite = process.env.SUPPORT_SERVER_INVITE;
+        const e = new EmbedBuilder().setColor('#0099ff').setTitle('🎮 PlayBound Guide')
             .addFields(
-                { name: '\ud83e\ude99 Credits vs Arena score', value: creditsVsArenaBlurb() },
+                { name: '🪙 Credits vs Arena score', value: creditsVsArenaBlurb() },
                 {
-                    name: '\u25b6\ufe0f Play now (official)',
+                    name: '▶️ Play now (official)',
                     value:
-                        '**`/playgame`** \u2014 daily **platform** mini-games.\n\nThese are the **main** way to play and the **only** games that can count toward **ranked** faction wars (when enrolled + war rules allow).',
+                        '**`/playgame`** — daily **platform** mini-games.\n\nThese are the **main** way to play and the **only** games that can count toward **ranked** faction wars (when enrolled + war rules allow).',
                 },
                 {
-                    name: '\ud83c\udfdb\ufe0f Host your own (casual)',
+                    name: '🎛️ Host your own (casual)',
                     value:
-                        '**`/trivia`**, **`/triviasprint`**, **`/unscramble`**, **`/moviequotes`**, **`/namethattune`**, **`/caption`**, **`/spellingbee`**, **`/guessthenumber`**, **`/startserverdle`**, giveaways, etc. \u2014 **hosted** games for fun & server events.\n\nThey **do not** add points to **ranked** wars; casual / **unranked** challenges may still count them if configured.',
+                        '**`/trivia`**, **`/triviasprint`**, **`/unscramble`**, **`/moviequotes`**, **`/namethattune`**, **`/caption`**, **`/spellingbee`**, **`/guessthenumber`**, **`/startserverdle`**, giveaways, etc. — **hosted** games for fun & server events.\n\nThey **do not** add points to **ranked** wars; casual / **unranked** challenges may still count them if configured.',
                 },
-                {
-                    name: '\u2694\ufe0f Duels & factions',
-                    value:
-                        '`/duel` \u2014 **1v1 trivia** (hosted). **Global faction** (`/faction join`).\n\n' +
-                        '**`/factions`** = **Official Faction Rankings** (**ranked** war match points only). **`/faction server`** = server activity.\n\n' +
-                        '**`/faction_challenge`** \u2014 **ranked** = **/playgame** only for scoring; **unranked** = local, hosted allowed if filter says so. **Premium** + manager/leader to create. `/set_faction_challenge_defaults`, `/set_faction_leader_role`. **2 duels + 1 royale**/UTC day. `/faction_recruit` \u00b7 `/leaderboard_history`.',
-                },
-                {
-                    name: '\ud83d\udce3 Grow',
-                    value: '`/invite` + `/invites`\n\nAdmin `/claim_referral` in new servers \u00b7 `/invite_leaderboard`.',
-                },
-                {
-                    name: '\ud83d\udc64 Profile & shop',
-                    value: `\`/profile\` \u2014 scores, **faction** (server + official name), **badges** on **server activity** board, ledger.\n\n**Premium:** \`/profile user:@member\`.\n\n\`/leaderboard\` = **Server activity rankings** (**${CREDITS}**; not global faction board). Game \`points\` cap **${MAX_POINTS_PER_PLACEMENT}**. \`/inventory\` & \`/shop\` private.`,
-                },
-                {
-                    name: '\ud83c\udf81 Giveaways',
-                    value: 'Join active giveaways with the \ud83c\udf89 button in game threads.',
-                },
-                {
-                    name: '\ud83d\udee0\ufe0f Support',
-                    value: invite ? `[Join Support Server](${invite})` : 'Use `/ticket` for bugs, suggestions, and help.',
-                },
+                       { name: '⚔️ Duels & factions', value: '`/duel` — **1v1 trivia** (hosted). **Global faction** (`/faction join`).\n\n**`/factions`** = **Official Faction Rankings** (**ranked** war match points only). **`/faction server`** = server activity.\n\n**`/faction_challenge`** — **ranked** = **/playgame** only for scoring; **unranked** = local, hosted allowed if filter says so. **Premium** + manager/leader to create. `/set_faction_challenge_defaults`, `/set_faction_ranked_rules`, `/set_faction_leader_role`. **2 duels + 1 royale**/UTC day. `/faction_recruit` · `/leaderboard_history`.' },
+                       { name: '📣 Grow', value: '`/invite` + `/invites`\n\nAdmin `/claim_referral` in new servers · `/invite_leaderboard`.' },
+                       { name: '👤 Profile & shop', value: `\`/profile\` — scores, **faction** (server + official name), **badges** on **server activity** board, ledger.\n\n**Premium:** \`/profile user:@member\`.\n\n\`/leaderboard\` = **Server activity rankings** (**${CREDITS}**; not global faction board). Game \`points\` cap **${MAX_POINTS_PER_PLACEMENT}**. \`/inventory\` & \`/shop\` private.` },
+                       { name: '🎁 Giveaways', value: 'Join active giveaways with the 🎉 button in game threads.' },
+                       { name: '🛠️ Support', value: invite ? `[Join Support Server](${invite})` : 'Use `/ticket` for bugs, suggestions, and help.' },
             );
         await interaction.reply({ embeds: [e], ephemeral: true });
     }
@@ -3326,36 +3397,14 @@ if (interaction.isButton()) {
                 newFac.members += 1;
                 await newFac.save();
             }
-            let sysSw = await getSystemConfig(guildId);
+            const sysSw = await getSystemConfig(guildId);
             await syncFactionMemberRoles(interaction.guild, interaction.user.id, sysSw, newName);
-
-            // Auto-provision faction role + channel for the new faction
-            let switchProvisionWarnings = '';
-            try {
-                const roleResult = await ensureFactionRole(interaction.guild, newName, sysSw);
-                if (roleResult.error) {
-                    switchProvisionWarnings += `\n⚠️ Could not auto-create faction role: ${roleResult.error}`;
-                } else if (roleResult.roleId) {
-                    if (roleResult.created) {
-                        sysSw = await getSystemConfig(guildId);
-                        await syncFactionMemberRoles(interaction.guild, interaction.user.id, sysSw, newName);
-                    }
-                    const channelResult = await ensureFactionChannel(interaction.guild, newName, sysSw, roleResult.roleId);
-                    if (channelResult.error) {
-                        switchProvisionWarnings += `\n⚠️ Could not auto-create faction channel: ${channelResult.error}`;
-                    }
-                }
-            } catch (_) {
-                // Provisioning is best-effort; don't fail the switch
-            }
-
             const swEm = getFactionDisplayEmoji(newName, sysSw, newFac.emoji);
             const swDual = formatFactionDualLabel(newName, sysSw);
             return interaction.reply({
                 content:
                     `✅ Switched to **${swEm} ${swDual}**. **Official faction:** \`${newName}\`. Re-run \`/faction_challenge join\` if a challenge is active.\n\n` +
-                    `⏳ **Next /faction switch** — available after **7 days** (Premium cooldown between switches).` +
-                    switchProvisionWarnings,
+                    `⏳ **Next /faction switch** — available after **7 days** (Premium cooldown between switches).`,
                 ephemeral: true,
             });
         }
@@ -3627,6 +3676,10 @@ if (interaction.isButton()) {
                 return interaction.reply({ content: fcPermDeny, ephemeral: true });
             }
             await expireStaleChallenges(guildId, client);
+            const existing = await getActiveChallenge(guildId);
+            if (existing) {
+                return interaction.reply({ content: '❌ There is already an active faction challenge in this server. End it first with `/faction_challenge end`.', ephemeral: true });
+            }
             const warsToday = await countFactionChallengesToday(guildId);
             if (warsToday >= 3) {
                 return interaction.reply({
@@ -3651,14 +3704,6 @@ if (interaction.isButton()) {
             if (factionA === factionB) {
                 return interaction.reply({ content: '❌ Choose two **different** factions.', ephemeral: true });
             }
-            const overlap = await checkFactionOverlap(guildId, [factionA, factionB]);
-            if (overlap.conflict) {
-                const endTs = Math.floor(new Date(overlap.endAt).getTime() / 1000);
-                return interaction.reply({
-                    content: `❌ **${overlap.factions.join(', ')}** ${overlap.factions.length === 1 ? 'is' : 'are'} already in an active war (ends <t:${endTs}:R>). End it first or pick different factions.`,
-                    ephemeral: true,
-                });
-            }
             const challengeMode = 'ranked';
             const durationHrs = interaction.options.getInteger('duration_hours');
             let { gameType, scoringMode, topN } = resolveFactionChallengeCreateOptions(configFc, {
@@ -3666,42 +3711,55 @@ if (interaction.isButton()) {
                 scoringMode: null,
                 topN: null,
             });
+            const maxPerRaw = interaction.options.getInteger('max_per_team');
+            let maxPerTeam = maxPerRaw != null && maxPerRaw >= 1 ? Math.min(25, maxPerRaw) : null;
+            let pointCap = null;
 
             scoringMode = RANKED_FIXED_SCORING_MODE;
             topN = RANKED_FIXED_TOP_N;
             const vErrs = validateChallengeCreateParams({
                 challengeMode: 'ranked',
-                pointCap: null,
-                maxPerTeam: null,
+                pointCap,
+                maxPerTeam,
                 scoringMode,
                 topN,
                 warVersion: RANKED_SLASH_CREATE_WAR_VERSION,
             });
             if (vErrs.length) {
-                return interaction.reply({ content: `\u274c ${vErrs[0]}`, ephemeral: true });
+                return interaction.reply({ content: `❌ ${vErrs[0]}`, ephemeral: true });
             }
 
             const gameTypesArr = resolveGameTypesArrayForChallenge(null, gameType);
             const platSettings = await getSettings();
             const rankedGtErrs = validateRankedChallengeGameSelection(gameTypesArr, platSettings);
             if (rankedGtErrs.length) {
-                return interaction.reply({ content: `\u274c ${rankedGtErrs[0]}`, ephemeral: true });
+                return interaction.reply({ content: `❌ ${rankedGtErrs[0]}`, ephemeral: true });
             }
             const legacyGameType =
                 gameTypesArr.length === 1 ? gameTypesArr[0] : gameTypesArr.includes('all') ? 'all' : gameTypesArr[0];
             const gameFilterLabel = formatChallengeGameFilterLabel({ gameTypes: gameTypesArr, gameType: legacyGameType });
+            const contributionCapsFromSlash = parseContributionCapsCsv(interaction.options.getString('contribution_caps'));
+            const contributionCapsByTag = (() => {
+                if (challengeMode !== 'ranked') return null;
+                const cfgCaps = rankedContributionCapsFromConfig(configFc);
+                const merged = { ...(cfgCaps || {}), ...(contributionCapsFromSlash || {}) };
+                return Object.keys(merged).length ? merged : null;
+            })();
             const rankedSnap = buildRankedRulesSnapshot({
                 challengeMode,
                 scoringMode,
                 topN,
-                maxPerTeam: null,
+                maxPerTeam,
                 gameTypes: gameTypesArr,
-                contributionCapsByTag: null,
-                pointCap: null,
+                contributionCapsByTag,
+                pointCap,
             });
 
+            const capLine = pointCap
+                ? `\nPoint goal: first team to **${pointCap.toLocaleString()}** enrolled **war total** (base mini-game score) ends the war early.`
+                : '';
             const modeExplain =
-                '\n\n**Official ranked war** \u2014 affects **global** standings (**match points**: win **+3**, tie **+1**). **Only /playgame** platform games can score; **hosted** commands (/trivia, etc.) never count.';
+                '\n\n**Official ranked war** — affects **global** standings (**match points**: win **+3**, tie **+1**). **Only /playgame** platform games can score; **hosted** commands (/trivia, etc.) never count.';
 
             const endAt = new Date(Date.now() + durationHrs * 3600000);
             await FactionChallenge.create({
@@ -3714,10 +3772,10 @@ if (interaction.isButton()) {
                 gameTypes: gameTypesArr,
                 scoringMode,
                 topN,
-                pointCap: null,
-                maxPerTeam: null,
+                pointCap,
+                maxPerTeam,
                 warVersion: RANKED_SLASH_CREATE_WAR_VERSION,
-                contributionCapsByTag: null,
+                contributionCapsByTag,
                 rankedRulesSnapshot: rankedSnap,
                 status: 'active',
                 createdBy: interaction.user.id,
@@ -3737,24 +3795,21 @@ if (interaction.isButton()) {
                 gameFilterLabel,
                 scoringMode,
                 topN,
-                pointCap: null,
-                maxPerTeam: null,
+                pointCap,
+                maxPerTeam,
                 isRoyale: false,
                 factionA,
                 factionB,
                 challengeMode,
             });
-            await announceFactionWarToFactionChannels(client, guildId, configFc, [factionA, factionB],
-                `\u2694\uFE0F **Faction war announced!** **${matchupLineDuelLive}** \u2014 ends <t:${Math.floor(endAt.getTime() / 1000)}:F>. Use \`/faction_challenge join\` to enroll.`
-            );
-            const pubLine = announced ? `\n\n\ud83d\udce3 Posted to <#${configFc.announceChannel}>.` : '';
+            const pubLine = announced ? `\n\n📣 Posted to <#${configFc.announceChannel}>.` : '';
             const liveA = formatFactionDualLabel(factionA, configFc);
             const liveB = formatFactionDualLabel(factionB, configFc);
             return interaction.reply({
                 content:
-                    `\u2705 **Faction challenge created!** **${liveA}** vs **${liveB}** \u2014 ends <t:${Math.floor(endAt.getTime() / 1000)}:F>. Members use \`/faction_challenge join\` to enroll.` +
+                    `✅ **Faction challenge created!** **${liveA}** vs **${liveB}** — ends <t:${Math.floor(endAt.getTime() / 1000)}:F>. Members use \`/faction_challenge join\` to enroll.` +
                     `\n\nGames: \`${gameFilterLabel}\`\n` +
-                    `Scoring: **${RANKED_SCORING_DISPLAY_LABEL}**${modeExplain}${pubLine}\n\n` +
+                    `Scoring: **${RANKED_SCORING_DISPLAY_LABEL}**${capLine}${modeExplain}${pubLine}\n\n` +
                     `_Only **enrolled** players contribute. Only **allowed game types** count._`,
                 ephemeral: true,
             });
@@ -3769,13 +3824,9 @@ if (interaction.isButton()) {
                 return interaction.reply({ content: fcPermDeny, ephemeral: true });
             }
             await expireStaleChallenges(guildId, client);
-            const overlapRoyale = await checkFactionOverlap(guildId, ROYALE_FACTIONS);
-            if (overlapRoyale.conflict) {
-                const endTs = Math.floor(new Date(overlapRoyale.endAt).getTime() / 1000);
-                return interaction.reply({
-                    content: `❌ **${overlapRoyale.factions.join(', ')}** ${overlapRoyale.factions.length === 1 ? 'is' : 'are'} already in an active war (ends <t:${endTs}:R>). End it first before starting a royale.`,
-                    ephemeral: true,
-                });
+            const existingRoyale = await getActiveChallenge(guildId);
+            if (existingRoyale) {
+                return interaction.reply({ content: '❌ There is already an active faction challenge in this server. End it first with `/faction_challenge end`.', ephemeral: true });
             }
             const warsTodayR = await countFactionChallengesToday(guildId);
             if (warsTodayR >= 3) {
@@ -3791,42 +3842,55 @@ if (interaction.isButton()) {
                 scoringMode: null,
                 topN: null,
             });
+            const maxPerRawR = interaction.options.getInteger('max_per_team');
+            let maxPerTeamR = maxPerRawR != null && maxPerRawR >= 1 ? Math.min(25, maxPerRawR) : null;
+            let pointCapR = null;
 
             scoringModeR = RANKED_FIXED_SCORING_MODE;
             topNR = RANKED_FIXED_TOP_N;
             const vErrsR = validateChallengeCreateParams({
                 challengeMode: 'ranked',
-                pointCap: null,
-                maxPerTeam: null,
+                pointCap: pointCapR,
+                maxPerTeam: maxPerTeamR,
                 scoringMode: scoringModeR,
                 topN: topNR,
                 warVersion: RANKED_SLASH_CREATE_WAR_VERSION,
             });
             if (vErrsR.length) {
-                return interaction.reply({ content: `\u274c ${vErrsR[0]}`, ephemeral: true });
+                return interaction.reply({ content: `❌ ${vErrsR[0]}`, ephemeral: true });
             }
 
             const gameTypesArrR = resolveGameTypesArrayForChallenge(null, gameTypeR);
             const platSettingsR = await getSettings();
             const rankedGtErrsR = validateRankedChallengeGameSelection(gameTypesArrR, platSettingsR);
             if (rankedGtErrsR.length) {
-                return interaction.reply({ content: `\u274c ${rankedGtErrsR[0]}`, ephemeral: true });
+                return interaction.reply({ content: `❌ ${rankedGtErrsR[0]}`, ephemeral: true });
             }
             const legacyGameTypeR =
                 gameTypesArrR.length === 1 ? gameTypesArrR[0] : gameTypesArrR.includes('all') ? 'all' : gameTypesArrR[0];
             const gameFilterLabelR = formatChallengeGameFilterLabel({ gameTypes: gameTypesArrR, gameType: legacyGameTypeR });
+            const contributionCapsFromSlashR = parseContributionCapsCsv(interaction.options.getString('contribution_caps'));
+            const contributionCapsByTagR = (() => {
+                if (challengeModeR !== 'ranked') return null;
+                const cfgCaps = rankedContributionCapsFromConfig(configFc);
+                const merged = { ...(cfgCaps || {}), ...(contributionCapsFromSlashR || {}) };
+                return Object.keys(merged).length ? merged : null;
+            })();
             const rankedSnapR = buildRankedRulesSnapshot({
                 challengeMode: challengeModeR,
                 scoringMode: scoringModeR,
                 topN: topNR,
-                maxPerTeam: null,
+                maxPerTeam: maxPerTeamR,
                 gameTypes: gameTypesArrR,
-                contributionCapsByTag: null,
-                pointCap: null,
+                contributionCapsByTag: contributionCapsByTagR,
+                pointCap: pointCapR,
             });
 
+            const capLineR = pointCapR
+                ? `\nPoint goal: **${pointCapR.toLocaleString()}** enrolled **war total** (first team there wins).`
+                : '';
             const modeExplainR =
-                '\n\n**Official ranked royale** \u2014 affects **global** standings (**match points**: win **+3**, shared ties **+1** where rules say so). **Only /playgame** games score; hosted commands never count.';
+                '\n\n**Official ranked royale** — affects **global** standings (**match points**: win **+3**, shared ties **+1** where rules say so). **Only /playgame** games score; hosted commands never count.';
 
             const endAtR = new Date(Date.now() + durationHrsR * 3600000);
             const participantsByFaction = new Map();
@@ -3843,10 +3907,10 @@ if (interaction.isButton()) {
                 gameTypes: gameTypesArrR,
                 scoringMode: scoringModeR,
                 topN: topNR,
-                pointCap: null,
-                maxPerTeam: null,
+                pointCap: pointCapR,
+                maxPerTeam: maxPerTeamR,
                 warVersion: RANKED_SLASH_CREATE_WAR_VERSION,
-                contributionCapsByTag: null,
+                contributionCapsByTag: contributionCapsByTagR,
                 rankedRulesSnapshot: rankedSnapR,
                 status: 'active',
                 createdBy: interaction.user.id,
@@ -3867,25 +3931,22 @@ if (interaction.isButton()) {
                 gameFilterLabel: gameFilterLabelR,
                 scoringMode: scoringModeR,
                 topN: topNR,
-                pointCap: null,
-                maxPerTeam: null,
+                pointCap: pointCapR,
+                maxPerTeam: maxPerTeamR,
                 isRoyale: true,
                 factionA: ROYALE_FACTIONS[0],
                 factionB: ROYALE_FACTIONS[1],
                 battleFactions: [...ROYALE_FACTIONS],
                 challengeMode: challengeModeR,
             });
-            await announceFactionWarToFactionChannels(client, guildId, configFc, [...ROYALE_FACTIONS],
-                `\u2694\uFE0F **Faction royale announced!** **${matchupLineRoyaleLive}** \u2014 ends <t:${Math.floor(endAtR.getTime() / 1000)}:F>. Use \`/faction_challenge join\` to enroll.`
-            );
-            const pubLineR = announcedR ? `\n\n\ud83d\udce3 Posted to <#${configFc.announceChannel}>.` : '';
+            const pubLineR = announcedR ? `\n\n📣 Posted to <#${configFc.announceChannel}>.` : '';
             const royaleLineLive = ROYALE_FACTIONS.map((n) => formatFactionDualLabel(n, configFc)).join(' vs ');
             const royaleWayN = ROYALE_FACTIONS.length;
             return interaction.reply({
                 content:
-                    `\u2705 **${royaleWayN}-way faction royale!** **${royaleLineLive}** \u2014 ends <t:${Math.floor(endAtR.getTime() / 1000)}:F>. Members use \`/faction_challenge join\` to enroll.` +
+                    `✅ **${royaleWayN}-way faction royale!** **${royaleLineLive}** — ends <t:${Math.floor(endAtR.getTime() / 1000)}:F>. Members use \`/faction_challenge join\` to enroll.` +
                     `\n\nGames: \`${gameFilterLabelR}\`\n` +
-                    `Scoring: **${RANKED_SCORING_DISPLAY_LABEL}**${modeExplainR}${pubLineR}\n\n` +
+                    `Scoring: **${RANKED_SCORING_DISPLAY_LABEL}**${capLineR}${modeExplainR}${pubLineR}\n\n` +
                     `_Only **enrolled** players contribute. Only **allowed game types** count._`,
                 ephemeral: true,
             });
@@ -3893,13 +3954,13 @@ if (interaction.isButton()) {
 
         if (sub === 'join') {
             await expireStaleChallenges(guildId, client);
+            const ch = await getActiveChallenge(guildId);
+            if (!ch) {
+                return interaction.reply({ content: '❌ There is no active faction challenge in this server.', ephemeral: true });
+            }
             const user = await getUser(guildId, interaction.user.id);
             if (!user.faction) {
                 return interaction.reply({ content: '❌ Join a global faction first with `/faction join` (use the **name** option).', ephemeral: true });
-            }
-            const ch = await getActiveChallengeForFaction(guildId, user.faction);
-            if (!ch) {
-                return interaction.reply({ content: '❌ No active war for your faction.', ephemeral: true });
             }
             const doc = await FactionChallenge.findById(ch._id);
             if (isRoyale(doc)) {
@@ -3964,76 +4025,10 @@ if (interaction.isButton()) {
 
         if (sub === 'status') {
             await expireStaleChallenges(guildId, client);
-            const showAll = interaction.options.getBoolean('all');
-            const stViewer = await getUser(guildId, interaction.user.id);
-
-            // If 'all' flag or user's faction not in a war, show summary of all active wars
-            if (showAll || !stViewer.faction) {
-                const allWars = await getAllActiveChallenges(guildId);
-                if (!allWars.length) {
-                    return interaction.reply({ content: '❌ No active faction wars in this server.', ephemeral: true });
-                }
-                const stCfg = await getSystemConfig(guildId);
-                const allFacNames = [...new Set(allWars.flatMap(w => isRoyale(w) ? [...(w.battleFactions || ROYALE_FACTIONS)] : [w.factionA, w.factionB]))];
-                const stFacRows = await Faction.find({ name: { $in: allFacNames } }).select('name emoji').lean();
-                const stEmojiBy = new Map(stFacRows.map((d) => [d.name, d.emoji]));
-                const stWarLabel = (name) => {
-                    const em = getFactionDisplayEmoji(name, stCfg, stEmojiBy.get(name));
-                    const dual = formatFactionDualLabel(name, stCfg);
-                    return `${em} ${dual}`;
-                };
-                const lines = allWars.map((w) => {
-                    const names = isRoyale(w) ? [...(w.battleFactions || ROYALE_FACTIONS)] : [w.factionA, w.factionB];
-                    const matchup = names.map(n => stWarLabel(n)).join(' vs ');
-                    const endTs = Math.floor(w.endAt.getTime() / 1000);
-                    const ranked = isChallengeRanked(w);
-                    const badge = ranked ? '🏛️' : '🎉';
-                    const winner = pickChallengeWinner(w);
-                    const lead = winner ? stWarLabel(winner) : 'Tie';
-                    return `${badge} ${matchup} — ends <t:${endTs}:R> · Leading: ${lead}`;
-                });
-                const embed = new EmbedBuilder()
-                    .setColor('#FF6347')
-                    .setTitle(`Active faction wars (${allWars.length})`)
-                    .setDescription(lines.join('\n\n').slice(0, 4090));
-                return interaction.reply({ embeds: [embed] });
-            }
-
-            // Try to find user's faction-specific war
-            const ch = await getActiveChallengeForFaction(guildId, stViewer.faction);
+            const ch = await getActiveChallenge(guildId);
             if (!ch) {
-                // Fall back to showing all active wars summary
-                const allWars = await getAllActiveChallenges(guildId);
-                if (!allWars.length) {
-                    return interaction.reply({ content: '❌ No active faction wars in this server.', ephemeral: true });
-                }
-                const stCfg = await getSystemConfig(guildId);
-                const allFacNames = [...new Set(allWars.flatMap(w => isRoyale(w) ? [...(w.battleFactions || ROYALE_FACTIONS)] : [w.factionA, w.factionB]))];
-                const stFacRows = await Faction.find({ name: { $in: allFacNames } }).select('name emoji').lean();
-                const stEmojiBy = new Map(stFacRows.map((d) => [d.name, d.emoji]));
-                const stWarLabel = (name) => {
-                    const em = getFactionDisplayEmoji(name, stCfg, stEmojiBy.get(name));
-                    const dual = formatFactionDualLabel(name, stCfg);
-                    return `${em} ${dual}`;
-                };
-                const lines = allWars.map((w) => {
-                    const names = isRoyale(w) ? [...(w.battleFactions || ROYALE_FACTIONS)] : [w.factionA, w.factionB];
-                    const matchup = names.map(n => stWarLabel(n)).join(' vs ');
-                    const endTs = Math.floor(w.endAt.getTime() / 1000);
-                    const ranked = isChallengeRanked(w);
-                    const badge = ranked ? '🏛️' : '🎉';
-                    const winner = pickChallengeWinner(w);
-                    const lead = winner ? stWarLabel(winner) : 'Tie';
-                    return `${badge} ${matchup} — ends <t:${endTs}:R> · Leading: ${lead}`;
-                });
-                const embed = new EmbedBuilder()
-                    .setColor('#FF6347')
-                    .setTitle(`Active faction wars (${allWars.length}) — your faction is not in a war`)
-                    .setDescription(lines.join('\n\n').slice(0, 4090));
-                return interaction.reply({ embeds: [embed] });
+                return interaction.reply({ content: '❌ There is no active faction challenge in this server.', ephemeral: true });
             }
-
-            // Show user's specific war (existing detailed view)
             const stCfg = await getSystemConfig(guildId);
             const stFacNames = isRoyale(ch) ? [...(ch.battleFactions || ROYALE_FACTIONS)] : [ch.factionA, ch.factionB];
             const stFacRows = await Faction.find({ name: { $in: stFacNames } }).select('name emoji').lean();
@@ -4057,6 +4052,7 @@ if (interaction.isButton()) {
                 ? `${stFacNames.map((n) => stWarLabel(n)).join(' vs ')}\n\nGames: \`${filterLbl}\` · ${label}\n\nEnds: <t:${Math.floor(ch.endAt.getTime() / 1000)}:R>${scoreNote}${fairnessSt}`
                 : `${stWarLabel(ch.factionA)} vs ${stWarLabel(ch.factionB)}\n\nGames: \`${filterLbl}\` · ${label}\n\nEnds: <t:${Math.floor(ch.endAt.getTime() / 1000)}:R>${scoreNote}${fairnessSt}`;
             const embed = new EmbedBuilder().setColor('#FF6347').setTitle(title).setDescription(desc);
+            const stViewer = await getUser(guildId, interaction.user.id);
             const stEnrolled =
                 stViewer.faction &&
                 (await isUserEnrolledInActiveFactionChallenge(guildId, interaction.user.id, stViewer.faction));
@@ -4197,66 +4193,29 @@ if (interaction.isButton()) {
                 return interaction.reply({ content: fcPermDeny, ephemeral: true });
             }
             await expireStaleChallenges(guildId, client);
-
-            const endAll = interaction.options.getBoolean('all');
-            const factionArg = interaction.options.getString('faction');
-
-            // Helper to end a single war and collect its summary
-            const endOneWar = async (ch) => {
-                ch.status = 'ended';
-                ch.endedAt = new Date();
-                ch.winnerFaction = pickChallengeWinner(ch);
-                await ch.save();
-                await applyEndedChallengeToGlobalTotals(client, guildId, ch._id);
-                await grantFactionVictoryRoleIfConfigured(client, guildId, ch.winnerFaction, ch);
-                await grantWarEndPersonalCredits(client, guildId, ch._id);
-                const w = ch.winnerFaction;
-                const names = teamNames(ch);
-                const matchup = names.join(' vs ');
-                const summary = w ? `**${w}** wins!` : '**Tie** — no single winner.';
-                const afterEnd = await FactionChallenge.findById(ch._id).lean();
-                let globalTail = '';
-                if (afterEnd && isChallengeRanked(afterEnd)) {
-                    globalTail = afterEnd.rankedResultSummary
-                        ? ` ${afterEnd.rankedResultSummary}`
-                        : ' Global standings updated.';
-                } else if (afterEnd) {
-                    globalTail = ' Casual — global standings unchanged.';
-                }
-                return `🏁 **${matchup}**: ${summary}${globalTail}`;
-            };
-
-            if (endAll) {
-                const allWars = await getAllActiveChallenges(guildId);
-                if (!allWars.length) {
-                    return interaction.reply({ content: '❌ No active faction wars to end.', ephemeral: true });
-                }
-                const results = [];
-                for (const war of allWars) {
-                    results.push(await endOneWar(war));
-                }
-                return interaction.reply({ content: results.join('\n\n').slice(0, 2000), ephemeral: true });
-            }
-
-            if (factionArg) {
-                const ch = await getActiveChallengeForFaction(guildId, factionArg);
-                if (!ch) {
-                    return interaction.reply({ content: `❌ No active war for **${factionArg}**.`, ephemeral: true });
-                }
-                const result = await endOneWar(ch);
-                return interaction.reply({ content: result, ephemeral: true });
-            }
-
-            // Default: end user's faction's war
-            if (!actor.faction) {
-                return interaction.reply({ content: '❌ You have no faction. Use the `all` or `faction` option, or join a faction first.', ephemeral: true });
-            }
-            const ch = await getActiveChallengeForFaction(guildId, actor.faction);
+            const ch = await getActiveChallenge(guildId);
             if (!ch) {
-                return interaction.reply({ content: '❌ No active war for your faction.', ephemeral: true });
+                return interaction.reply({ content: '❌ No active faction challenge to end.', ephemeral: true });
             }
-            const result = await endOneWar(ch);
-            return interaction.reply({ content: result, ephemeral: true });
+            ch.status = 'ended';
+            ch.endedAt = new Date();
+            ch.winnerFaction = pickChallengeWinner(ch);
+            await ch.save();
+            await applyEndedChallengeToGlobalTotals(client, guildId, ch._id);
+            await grantFactionVictoryRoleIfConfigured(client, guildId, ch.winnerFaction, ch);
+            await grantWarEndPersonalCredits(client, guildId, ch._id);
+            const w = ch.winnerFaction;
+            const summary = w ? `**${w}** wins!` : '**Tie** — no single winner.';
+            const afterEnd = await FactionChallenge.findById(ch._id).lean();
+            let globalTail = '';
+            if (afterEnd && isChallengeRanked(afterEnd)) {
+                globalTail = afterEnd.rankedResultSummary
+                    ? `\n${afterEnd.rankedResultSummary}\n_This ranked result updated **global** faction standings._`
+                    : '\n_Global standings updated (**match points**)._';
+            } else if (afterEnd) {
+                globalTail = '\n_Casual challenge — **global standings unchanged**._';
+            }
+            return interaction.reply({ content: `🏁 Challenge ended. ${summary}${globalTail}`, ephemeral: true });
         }
     }
 
@@ -4448,7 +4407,7 @@ if (interaction.isButton()) {
             }
         }
 
-        await interaction.reply({ embeds: [embed], components: profileComponents, ephemeral: true });
+        await interaction.reply({ embeds: [embed], components: profileComponents });
     }
 
     if (await triviaGame.handleInteraction(interaction, client)) return;

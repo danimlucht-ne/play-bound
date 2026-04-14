@@ -32,12 +32,52 @@ const { createAdminPanelRouter } = require('./api/adminPanelRoutes');
  * @param {object} botCtx.triggers - game end triggers from `createGameEndTriggers`
  * @returns {import('express').Express}
  */
+/**
+ * @param {string|null|undefined} p
+ * @returns {string|null}
+ */
+function resolvedEnvPath(p) {
+    if (p == null || String(p).trim() === '') return null;
+    const s = String(p).trim();
+    return path.isAbsolute(s) ? s : path.resolve(process.cwd(), s);
+}
+
+/**
+ * Serve terms/privacy from optional drop-in paths (before static `PUBLIC_DIR`).
+ * Priority: `LEGAL_TERMS_FILE` / `LEGAL_PRIVACY_FILE`, then `LEGAL_CONTENT_DIR/{terms|privacy}.html`.
+ * @param {import('express').Response} res
+ * @param {'terms.html' | 'privacy.html'} basename
+ * @returns {boolean} true if a file was sent
+ */
+function tryServeLegalPageFromEnv(res, basename) {
+    const envFile = basename === 'terms.html' ? process.env.LEGAL_TERMS_FILE : process.env.LEGAL_PRIVACY_FILE;
+    const direct = resolvedEnvPath(envFile);
+    if (direct && fs.existsSync(direct) && fs.statSync(direct).isFile()) {
+        res.type('text/html; charset=utf-8');
+        res.sendFile(path.resolve(direct));
+        return true;
+    }
+    const dir = resolvedEnvPath(process.env.LEGAL_CONTENT_DIR);
+    if (dir && fs.existsSync(dir) && fs.statSync(dir).isDirectory()) {
+        const joined = path.join(dir, basename);
+        if (fs.existsSync(joined) && fs.statSync(joined).isFile()) {
+            res.type('text/html; charset=utf-8');
+            res.sendFile(path.resolve(joined));
+            return true;
+        }
+    }
+    return false;
+}
+
 function createHttpApp(botCtx) {
     const app = express();
     app.locals.playbound = botCtx;
 
     const resolvedPublic = process.env.PUBLIC_DIR ? path.resolve(process.cwd(), process.env.PUBLIC_DIR) : null;
     const hasPublic = Boolean(resolvedPublic && fs.existsSync(resolvedPublic));
+    if (hasPublic) {
+        app.locals.playboundPublicDir = resolvedPublic;
+    }
 
     const generalLimiter = rateLimit({
         windowMs: 15 * 60 * 1000,
@@ -165,7 +205,7 @@ function createHttpApp(botCtx) {
         res.json({ received: true });
     });
 
-    app.use(express.json());
+    app.use(express.json({ limit: '2mb' }));
 
     app.use((req, res, next) => {
         if (!req.path.startsWith('/api')) {

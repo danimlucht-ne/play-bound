@@ -131,8 +131,6 @@ const SystemSchema = new mongoose.Schema({
     achievementChannel: { type: String, default: null },
     leaderboardChannel: { type: String, default: null },
     storyChannel: { type: String, default: null },
-    /** Channel for member join/leave log messages. */
-    memberLogChannel: { type: String, default: null },
     managerRoleId: { type: String, default: null },
     /** When true, any member may use listed game slash commands (not only Admin / Manager). */
     allowMemberHostedGames: { type: Boolean, default: false },
@@ -173,8 +171,6 @@ const SystemSchema = new mongoose.Schema({
     factionLeaderRoleId: { type: String, default: null },
     /** Discord role id per global faction (optional). */
     factionRoleMap: { type: FactionGuildSlotSchema, default: () => ({}) },
-    /** Discord channel id per global faction (auto-provisioned private HQ). */
-    factionChannelMap: { type: FactionGuildSlotSchema, default: () => ({}) },
     /** Display-only renames for global factions in this server (one slot per official team). */
     factionDisplayNames: { type: FactionGuildSlotSchema, default: () => ({}) },
     /** Display-only emoji overrides (Unicode or <:id> custom) for global factions in this server. */
@@ -558,6 +554,17 @@ const FactionRecruitRewardSchema = new mongoose.Schema({
 
 FactionRecruitRewardSchema.index({ recruiterUserId: 1, recruitUserId: 1 }, { unique: true });
 
+/** Singleton (`_id` = `global`): overrides `src/bot/constants` for Discord agreement gating when present (prod DB). */
+const LegalPolicyConfigSchema = new mongoose.Schema(
+    {
+        _id: { type: String, default: 'global' },
+        termsVersion: { type: String, required: true },
+        privacyVersion: { type: String, required: true },
+        updatedByDiscordUserId: { type: String, default: null },
+    },
+    { collection: 'legal_policy_config', timestamps: true },
+);
+
 const { PremiumPromptEventSchema } = require('./models/PremiumPromptEvent');
 
 /**
@@ -593,6 +600,7 @@ function registerModels(connection) {
         GamePlatformDailyStats: connection.model('GamePlatformDailyStats', GamePlatformDailyStatsSchema),
         GamePlatformAuditLog: connection.model('GamePlatformAuditLog', GamePlatformAuditLogSchema),
         PremiumPromptEvent: connection.model('PremiumPromptEvent', PremiumPromptEventSchema),
+        LegalPolicyConfig: connection.model('LegalPolicyConfig', LegalPolicyConfigSchema),
     };
 }
 

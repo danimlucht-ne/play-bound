@@ -131,6 +131,7 @@ function createMeRouter() {
                 },
                 admin: {
                     eligible: adminEligible,
+                    isDeveloper: Boolean(sess.isDeveloper),
                     guildIds: sess.isDeveloper ? [] : sess.adminGuildIds || [],
                 },
                 profile,
