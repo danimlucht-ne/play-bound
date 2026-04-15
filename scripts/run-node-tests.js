@@ -34,6 +34,22 @@ if (files.length === 0) {
     process.exit(1);
 }
 
+/**
+ * Some suites (notably interactionCreate.commands) finish all subtests but keep the event loop
+ * alive (stray timers / library internals). Node's --test-force-exit ends the process after the
+ * runner reports completion. Set PLAYBOUND_TEST_FORCE_EXIT=0 to disable (e.g. debugging handles).
+ */
+function testRunnerArgs(file) {
+    const args = ['--test'];
+    const raw = process.env.PLAYBOUND_TEST_FORCE_EXIT;
+    const off = raw === '0' || raw === 'false' || raw === 'off';
+    if (!off) {
+        args.push('--test-force-exit');
+    }
+    args.push(file);
+    return args;
+}
+
 /** Per-file spawn budget (ms). The interaction suite reloads the full router many times and can exceed 10m on slow CI runners. */
 function spawnTimeoutMs(rel) {
     if (rel.replace(/\\/g, '/').endsWith('tests/interactionCreate.commands.test.js')) {
@@ -48,7 +64,7 @@ for (const file of files) {
     const rel = path.relative(repoRoot, file);
     const relPosix = rel.split(path.sep).join('/');
     console.log(`\n=== ${rel} ===`);
-    const result = spawnSync(process.execPath, ['--test', file], {
+    const result = spawnSync(process.execPath, testRunnerArgs(file), {
         cwd: repoRoot,
         stdio: 'inherit',
         env: process.env,
