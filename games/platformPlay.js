@@ -68,7 +68,20 @@ function createEphemeralTransport(interaction) {
             const body = withEphemeral(payload);
             if (first) {
                 first = false;
-                return interaction.editReply(body);
+                if (typeof interaction.editReply === 'function') {
+                    return interaction.editReply(body);
+                }
+                // Some tests and lightweight call-sites provide reply() but not editReply().
+                if (typeof interaction.reply === 'function') {
+                    return interaction.reply(body);
+                }
+                if (typeof interaction.followUp === 'function') {
+                    return interaction.followUp(body);
+                }
+                throw new TypeError('Platform transport requires interaction.editReply/reply/followUp');
+            }
+            if (typeof interaction.followUp !== 'function') {
+                throw new TypeError('Platform transport requires interaction.followUp for subsequent sends');
             }
             return interaction.followUp(body);
         },

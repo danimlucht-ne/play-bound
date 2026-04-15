@@ -161,25 +161,19 @@ test('launchPlatformGameThread plus handlePlatformButton completes a reaction ru
         },
     });
 
-    const sentMessages = [];
-    const thread = {
-        id: 'thread-1',
-        async send(payload) {
-            sentMessages.push(payload);
-            return payload;
-        },
-    };
+    /** Threadless reaction_rush uses editReply then followUp for the round prompt. */
+    const ephemeralSends = [];
     const interaction = {
         guildId: 'guild-1',
         user: { id: 'host-1' },
-        channel: {
-            id: 'channel-1',
-            threads: {
-                async create(payload) {
-                    assert.equal(payload.name, 'Reaction Rush Thread');
-                    return thread;
-                },
-            },
+        channel: { id: 'channel-1' },
+        async editReply(payload) {
+            ephemeralSends.push(payload);
+            return { id: 'msg-intro', ...payload };
+        },
+        async followUp(payload) {
+            ephemeralSends.push(payload);
+            return { id: 'msg-question', ...payload };
         },
     };
 
@@ -192,8 +186,16 @@ test('launchPlatformGameThread plus handlePlatformButton completes a reaction ru
     });
 
     assert.equal(out.ok, true);
+    assert.equal(out.threadless, true);
     assert.equal(analyticsCalls[0][0], 'start');
-    const questionMessage = sentMessages.at(-1);
+    const questionMessage = ephemeralSends.find((p) =>
+        (p.components || []).some((row) =>
+            (row.components || []).some((c) => {
+                const id = c.data?.custom_id || c.data?.customId || '';
+                return id.includes('|rru|');
+            }),
+        ),
+    );
     assert.ok(questionMessage);
     assert.ok(Array.isArray(questionMessage.components));
     assert.ok(questionMessage.components.length > 0);
@@ -225,10 +227,10 @@ test('launchPlatformGameThread plus handlePlatformButton completes a reaction ru
     const buttonCalls = {};
     const buttonInteraction = {
         customId: customId.replace(`|${correctAnswer}`, `|${correctAnswer}`),
-        user: { id: 'guest-2' },
+        user: { id: 'host-1' },
         isButton: () => true,
-        message: questionMessage,
-        channel: thread,
+        message: { id: 'msg-question', ...questionMessage },
+        channel: { id: 'channel-1' },
         async reply(payload) {
             buttonCalls.reply = payload;
             return payload;
@@ -250,8 +252,8 @@ test('launchPlatformGameThread plus handlePlatformButton completes a reaction ru
     assert.equal(buttonCalls.update.components.length, 0);
     assert.equal(scoringCalls.length, 1);
     assert.equal(scoringCalls[0].gameTag, 'reaction_rush');
-    assert.equal(scoringCalls[0].userId, 'guest-2');
-    assert.deepEqual(analyticsCalls.at(-1), ['complete', 'reaction_rush', 5]);
+    assert.equal(scoringCalls[0].userId, 'host-1');
+    assert.deepEqual(analyticsCalls.at(-1), ['complete', 'reaction_rush', 12]);
     } finally {
         delete process.env.PLAYBOUND_SPEED_DELAY_MS;
     }
