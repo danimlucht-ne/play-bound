@@ -1407,6 +1407,39 @@ function createAdminPanelRouter() {
         }
     });
 
+    /** Bot developer: chronological join/leave events (since this feature shipped). */
+    router.get('/guild-installs', async (req, res) => {
+        if (!req.pbSession.isDeveloper) {
+            return res.status(403).json({ error: 'developer_only' });
+        }
+        const limit = clampLimit(req.query.limit, 100, 200);
+        try {
+            const rows = await mongoRouter.runWithForcedModels(mongoRouter.getModelsProd(), async () => {
+                const { BotGuildInstallEvent } = mongoRouter.getModelsProd();
+                return BotGuildInstallEvent.find({})
+                    .sort({ createdAt: -1 })
+                    .limit(limit)
+                    .select({ kind: 1, guildId: 1, guildName: 1, memberCount: 1, ownerId: 1, createdAt: 1 })
+                    .lean();
+            });
+            res.json({
+                entries: rows.map((r) => ({
+                    id: String(r._id),
+                    kind: r.kind,
+                    guildId: r.guildId,
+                    guildName: r.guildName || '',
+                    memberCount: r.memberCount != null ? r.memberCount : null,
+                    ownerId: r.ownerId || null,
+                    at: r.createdAt,
+                })),
+                cachedAt: new Date().toISOString(),
+            });
+        } catch (e) {
+            console.error('[API] GET /api/admin/guild-installs', e);
+            res.status(500).json({ error: 'guild_installs_unavailable' });
+        }
+    });
+
     return router;
 }
 

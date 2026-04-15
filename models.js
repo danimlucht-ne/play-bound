@@ -500,6 +500,22 @@ const GamePlatformAuditLogSchema = new mongoose.Schema({
 
 GamePlatformAuditLogSchema.index({ createdAt: -1 });
 
+/** Bot invited to / removed from a Discord guild (admin dashboard feed). */
+const BotGuildInstallEventSchema = new mongoose.Schema(
+    {
+        kind: { type: String, enum: ['join', 'leave'], required: true },
+        guildId: { type: String, required: true },
+        guildName: { type: String, default: '' },
+        memberCount: { type: Number, default: null },
+        ownerId: { type: String, default: null },
+        createdAt: { type: Date, default: Date.now },
+    },
+    { collection: 'botguildinstallevents' },
+);
+
+BotGuildInstallEventSchema.index({ createdAt: -1 });
+BotGuildInstallEventSchema.index({ guildId: 1, createdAt: -1 });
+
 /** Global per-Discord-user: referral codes, stats, faction-recruit counters. */
 const ReferralProfileSchema = new mongoose.Schema({
     userId: { type: String, required: true, unique: true },
@@ -601,6 +617,7 @@ function registerModels(connection) {
         GamePlatformDay: connection.model('GamePlatformDay', GamePlatformDaySchema),
         GamePlatformDailyStats: connection.model('GamePlatformDailyStats', GamePlatformDailyStatsSchema),
         GamePlatformAuditLog: connection.model('GamePlatformAuditLog', GamePlatformAuditLogSchema),
+        BotGuildInstallEvent: connection.model('BotGuildInstallEvent', BotGuildInstallEventSchema),
         PremiumPromptEvent: connection.model('PremiumPromptEvent', PremiumPromptEventSchema),
         LegalPolicyConfig: connection.model('LegalPolicyConfig', LegalPolicyConfigSchema),
     };

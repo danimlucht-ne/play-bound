@@ -8,10 +8,33 @@ const { getSystemConfig, refreshLeaderboard, addScore } = require('../../lib/db'
 const { syncFactionMemberRoles } = require('../../lib/factionGuild');
 const { automatedServerPostsEnabled } = require('../../lib/automatedPosts');
 
+/**
+ * @param {'join'|'leave'} kind
+ * @param {import('discord.js').Guild} guild
+ * @param {{ ownerId?: string|null }} [extra]
+ */
+async function recordBotGuildInstall(kind, guild, extra = {}) {
+    try {
+        await mongoRouter.runWithForcedModels(mongoRouter.getModelsProd(), async () => {
+            const { BotGuildInstallEvent } = mongoRouter.getModelsProd();
+            await BotGuildInstallEvent.create({
+                kind,
+                guildId: guild.id,
+                guildName: guild.name ? String(guild.name) : 'Unknown server',
+                memberCount: typeof guild.memberCount === 'number' ? guild.memberCount : null,
+                ownerId: extra.ownerId || null,
+            });
+        });
+    } catch (e) {
+        console.error('[guildInstallLog]', e.message || e);
+    }
+}
+
 function registerGuildEvents(client) {
     client.on('guildCreate', async (guild) => {
         console.log(`Joined new guild: ${guild.name} (${guild.id})`);
         const owner = await guild.fetchOwner();
+        await recordBotGuildInstall('join', guild, { ownerId: owner?.id || null });
 
         const welcomeEmbed = new EmbedBuilder()
             .setColor('#00FF00')
@@ -44,6 +67,10 @@ function registerGuildEvents(client) {
         try {
             await owner.send({ content: `Thanks for inviting my bot to **${guild.name}**!`, embeds: [welcomeEmbed] });
         } catch (e) { /* DMs closed */ }
+    });
+
+    client.on('guildDelete', async (guild) => {
+        await recordBotGuildInstall('leave', guild, {});
     });
 
     client.on('guildMemberAdd', async (m) => {
