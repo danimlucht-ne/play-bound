@@ -8,8 +8,8 @@
   },
   "scripts": {
     "start": "node index.js",
-    "test": "node --test tests/**/*.test.js",
-    "test:go-live": "npm run check:syntax && npm run check:syntax:ops && node --test tests/**/*.test.js",
+    "test": "node scripts/run-node-tests.js",
+    "test:go-live": "npm run check:syntax && npm run check:syntax:ops && node scripts/run-node-tests.js",
     "test:db:integration": "node --test tests/db.integration.test.js",
     "build:seed-words": "node scripts/build-seed-word-bank.js",
     "seed:official-factions": "node scripts/ensureOfficialFactions.js",
