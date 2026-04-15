@@ -4,12 +4,12 @@
   "description": "A Discord bot for a number guessing game",
   "main": "index.js",
   "engines": {
-    "node": ">=22"
+    "node": ">=20"
   },
   "scripts": {
     "start": "node index.js",
     "test": "node --test tests/**/*.test.js",
-    "test:go-live": "npm run check:syntax && npm run check:syntax:ops && node --test --test-isolation=none tests/**/*.test.js",
+    "test:go-live": "npm run check:syntax && npm run check:syntax:ops && node --test tests/**/*.test.js",
     "test:db:integration": "node --test tests/db.integration.test.js",
     "build:seed-words": "node scripts/build-seed-word-bank.js",
     "seed:official-factions": "node scripts/ensureOfficialFactions.js",
