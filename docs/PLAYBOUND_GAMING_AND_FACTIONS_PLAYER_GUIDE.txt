@@ -1,6 +1,9 @@
 ================================================================================
 PLAYBOUND — GAMING & FACTIONS (PLAYER + STAFF QUICK REFERENCE)
 ================================================================================
+Also see docs/QUICKSTART.md for channel setup and onboarding-style tips (Markdown).
+This .txt file is meant for pasting into Discord or wikis in one block.
+
 Copy this entire block into Discord, a wiki, or onboarding docs. Line length is
 kept reasonable for pasting into a single message (split if you hit limits).
 

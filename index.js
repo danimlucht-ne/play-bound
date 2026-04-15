@@ -1,6 +1,7 @@
 'use strict';
 
 require('dotenv').config();
+require('./lib/processLogCapture').install();
 const { playboundDebugEnabled } = require('./lib/playboundDebug');
 
 console.log('[BOT STARTUP] Initializing PlayBound Bot...');

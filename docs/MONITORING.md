@@ -4,6 +4,12 @@ This guide provides an overview of how to monitor the health and performance of 
 
 ---
 
+## 0. Browser log tail (developer only)
+
+If the marketing site talks to your bot’s API with **`DEVELOPER_ID`** logged in, **Admin → Logs** calls **`GET /api/admin/runtime-logs`** and shows a rolling tail of `console.log` / `warn` / `error` / `info` for **that process only** (since last restart). Tune buffer size with **`PLAYBOUND_UI_LOG_MAX_LINES`** (optional). For PM2 file logs, crashes before the process started, or disk retention, still use **`pm2 logs`** / **`journalctl`** on the server.
+
+---
+
 ## 1. Built-in CLI Tools (The Basics)
 
 Use these tools to get an immediate overview of your system's resource usage.

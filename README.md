@@ -51,8 +51,13 @@ The process loads **Discord**, **MongoDB**, and an **Express** app (Stripe webho
 | `npm run deploy:commands` | Register/update global slash commands |
 | `npm run check:syntax` | `node --check` on main entrypoints and libraries |
 | `npm run build:seed-words` | Build Serverdle word bank file for seeds |
+| `npm run seed:official-factions` | Ensure official faction rows in Mongo (`scripts/ensureOfficialFactions.js`) |
+| `node scripts/reconcileFactionTotalsFromUsers.js` | Reconcile faction totals from user documents (ops; read script header) |
+| `node scripts/count-seed.js` | Word-bank / seed counts (diagnostics) |
+| `scripts/backup.sh` | `mongodump`-style backup helper (see `docs/GO_LIVE_CHECKLIST.md`) |
 | `node scripts/regenerate-slash-readme.js` | Regenerate [Full slash command option reference](#full-slash-command-option-reference) from `deploy-commands.js` |
 | `node scripts/generate-slash-readme-tables.js` | Print the same tables to stdout (for piping or review) |
+| `scripts/archive/one-off/` | **Historical** one-off migrations and encoding tools — not for routine use (see folder `README.md`) |
 
 ---
 
@@ -226,13 +231,50 @@ Full tables lived in older README revisions; the **code** enforces rules in `lib
 - **PM2 (example):** `npx pm2 start index.js --name playbound --update-env`
 - **Database backups:** see `scripts/backup.sh` and comments in the previous README revision if you still use `mongodump`.
 - **After pulling code:** `npm install` if deps changed, then **`npm run deploy:commands`** if `deploy-commands.js` changed.
+- **Remote log tail (developer):** With the PlayBound site logged in as **`DEVELOPER_ID`**, open **Admin → Logs** to poll recent `console` output from the running Node process (`GET /api/admin/runtime-logs`). This is an in-memory ring buffer since the last restart—use **`pm2 logs`** on the VM for full history and boot-time output.
 
 ---
 
 ## Further reading
 
-- **Faction wars (detailed):** `docs/factioninstructions.md`
-- **Marketing / web onboarding UI:** `lucht-applications/play-bound/README.md` (sibling path from this monorepo layout)
+### Factions, scoring, and commands
+
+- **Faction slash commands (step-by-step):** `docs/factioninstructions.md`
+- **Scoring hub (links to all scoring docs):** `docs/FACTIONS_AND_SCORING_INDEX.md`
+- **Player-oriented scoring:** `docs/SCORING_GUIDE.md`
+- **Platform `/playgame` → Credits vs war ledger (implementation):** `docs/platform-game-faction-scoring.md`
+
+### Operations and hosting
+
+- **Go-live checklist:** `docs/GO_LIVE_CHECKLIST.md`
+- **Shutdown, kill switches, maintenance:** `docs/OPERATIONS_AND_SHUTDOWN.md`
+- **VM / process monitoring:** `docs/MONITORING.md`
+- **Self-hosting notes:** `docs/SELF_HOSTING.md`
+- **Integration tests against a real DB:** `docs/REAL_DB_TESTING.md`
+
+### Product reference
+
+- **Architecture and systems overview:** `docs/Systems.md`
+- **Game flow sequences:** `docs/GameSequences.md`
+- **Slash command catalog (narrative):** `docs/Commands.md`
+- **House rules / conduct:** `docs/RULES.md`
+- **Contributor / dev setup:** `docs/Developer.md`
+- **Quick start for server owners:** `docs/QUICKSTART.md`
+- **Plain-text player + staff reference (paste into Discord):** `docs/PLAYBOUND_GAMING_AND_FACTIONS_PLAYER_GUIDE.txt`
+
+### Legal and policy
+
+- **How to bump versions and publish HTML:** `UPDATING_LEGAL_DOCUMENTS.md` (repo root)
+- **Policy text (markdown, internal):** `docs/TERMS.md`, `docs/PRIVACY.md`
+
+### Archived specs (historical)
+
+- **Shipped landing + admin UI specs:** `docs/archive/specs/`
+- **Kiro feature specs (archived):** `docs/archive/kiro-specs/`
+
+### Marketing site (sibling repo)
+
+- **Web onboarding UI:** `lucht-applications/play-bound/README.md` (relative to parent `Programming` folder)
 
 ---
 

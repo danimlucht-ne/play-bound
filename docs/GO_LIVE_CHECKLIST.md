@@ -1,5 +1,7 @@
 # PlayBound — go-live checklist
 
+**Live runbook:** use this file for pre-launch and production checks. Older Kiro task trees for go-live and related work live under **`docs/archive/kiro-specs/`** (historical); do not assume unchecked items there are still tracked only in those files—migrate any real follow-ups here or into your issue tracker.
+
 Work through sections in order, or run **[parallel]** sections alongside others. Check boxes as you complete items.
 
 **Already assumed:** PM2 is running the bot; you will switch Stripe **live** payment links when ready (not duplicated here).
@@ -194,3 +196,17 @@ mongodump --uri=$env:MONGO_URI --out="C:\backups\playbound\$(Get-Date -Format 'y
 | Env template | `.env.example` |
 | Webhook server | `src/server/webhook.js` |
 | Crash recovery | `src/events/ready.js` |
+
+---
+
+## 11. Archived Kiro “go-live hardening” follow-ups
+
+The **`docs/archive/kiro-specs/go-live-hardening/tasks.md`** snapshot had mixed done/open items. Use it as **history only**; do not treat unchecked boxes there as an active backlog unless you explicitly revive them.
+
+**Still worth a conscious check:**
+
+- **`/ticket` thread visibility** (old task 4): confirm the implementation creates a **private** support thread (see **`src/events/interactionCreate.js`** / ticket handler paths).
+- **Name That Tune / iTunes** (old task 20): if you rely on that game, spot-check preview URL validation and API failure handling.
+
+**Large unchecked items** in that snapshot (e.g. custom `ServerFaction` / admin content commands, full game modularization) are **product backlog**, not go-live blockers—promote any you still want into your issue tracker and drop the rest.
+

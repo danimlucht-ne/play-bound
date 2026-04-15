@@ -2,6 +2,8 @@
 
 **Last Updated:** April 3, 2026
 
+> **Publishing:** To change live policy pages, version strings, and Discord re-acceptance, follow **`UPDATING_LEGAL_DOCUMENTS.md`** at the repository root (next to `README.md`).
+
 At PlayBound, your privacy matters. This Privacy Policy explains what information we collect when you use the PlayBound Discord bot, why we collect it, and how we protect it.
 
 ---

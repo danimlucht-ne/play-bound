@@ -1561,7 +1561,7 @@ if (interaction.isButton()) {
         return;
     }
 
-    const adminCommands = ['set_announcement_channel', 'set_announce_everyone', 'set_automated_posts', 'set_welcome_channel', 'add_welcome_message', 'remove_welcome_message', 'list_welcome_messages', 'set_birthday_channel', 'add_birthday_message', 'remove_birthday_message', 'list_birthday_messages', 'set_achievement_channel', 'set_leaderboard_channel', 'set_leaderboard_cadence', 'set_faction_reminder_channel', 'set_faction_victory_role', 'set_faction_challenge_defaults', 'set_faction_ranked_rules', 'set_story_channel', 'story_export', 'set_manager_role', 'set_member_game_hosts', 'set_auto_role', 'remove_auto_role', 'sync_auto_role', 'strip_role', 'schedule_announcement', 'adjustpoints', 'add_redirect', 'remove_redirect', 'endgame', 'wipe_leaderboard', 'giveaway', 'guessthenumber', 'playgame', 'startserverdle', 'trivia', 'triviasprint', 'namethattune', 'spellingbee', 'moviequotes', 'caption', 'unscramble', 'leaderboard', 'set_role_reward', 'achievement', 'tournament', 'faction_role_link', 'faction_rename', 'faction_emoji'];
+    const adminCommands = ['set_announcement_channel', 'set_announce_everyone', 'set_automated_posts', 'set_welcome_channel', 'add_welcome_message', 'remove_welcome_message', 'list_welcome_messages', 'set_birthday_channel', 'add_birthday_message', 'remove_birthday_message', 'list_birthday_messages', 'set_achievement_channel', 'set_leaderboard_channel', 'set_leaderboard_cadence', 'set_faction_reminder_channel', 'set_faction_victory_role', 'set_faction_challenge_defaults', 'set_faction_ranked_rules', 'set_story_channel', 'set_member_log_channel', 'story_export', 'set_manager_role', 'set_member_game_hosts', 'set_auto_role', 'remove_auto_role', 'sync_auto_role', 'strip_role', 'schedule_announcement', 'adjustpoints', 'add_redirect', 'remove_redirect', 'endgame', 'wipe_leaderboard', 'giveaway', 'guessthenumber', 'playgame', 'startserverdle', 'trivia', 'triviasprint', 'namethattune', 'spellingbee', 'moviequotes', 'caption', 'unscramble', 'leaderboard', 'set_role_reward', 'achievement', 'tournament', 'faction_role_link', 'faction_rename', 'faction_emoji'];
     /** When `allowMemberHostedGames` is on, regular members may start these (spam/abuse risk — use with channel slowmode). */
     const MEMBER_HOSTABLE_GAME_COMMANDS = [
         'giveaway',
@@ -1882,6 +1882,19 @@ if (interaction.isButton()) {
         const channel = interaction.options.getChannel('channel') || interaction.channel;
         await updateSystemConfig(guildId, c => c.storyChannel = channel.id);
         await interaction.reply({ content: `One-Word Story mode enabled in <#${channel.id}>!`, ephemeral: true });
+    }
+
+    if (interaction.commandName === 'set_member_log_channel') {
+        const chLog = interaction.options.getChannel('channel');
+        await updateSystemConfig(guildId, (c) => {
+            c.memberLogChannel = chLog ? chLog.id : null;
+        });
+        await interaction.reply({
+            content: chLog
+                ? `✅ Member join/leave lines will post in <#${chLog.id}> when **automated posts** are on.`
+                : '✅ Member log channel cleared.',
+            ephemeral: true,
+        });
     }
 
     if (interaction.commandName === 'story_export') {

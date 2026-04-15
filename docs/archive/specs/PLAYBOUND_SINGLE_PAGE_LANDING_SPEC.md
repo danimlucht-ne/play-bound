@@ -1,5 +1,7 @@
 # PlayBound single-page landing — product & technical specification
 
+> **Status: shipped (historical).** Archived under `docs/archive/specs/`. Current behavior: `lucht-applications/play-bound`, `src/server/webhook.js`, and `src/events/interactionCreate.js`.
+
 **UI repository:** `lucht_applications` (under the parent `Programming` folder; add to the workspace when implementing the front end).  
 **Backend / data:** `discord-bot-games` (MongoDB models, Express in `src/server/webhook.js`, bot process).
 

@@ -2,6 +2,8 @@
 
 How points are earned, how faction wars are scored, and how server size affects fairness.
 
+**See also:** [`FACTIONS_AND_SCORING_INDEX.md`](./FACTIONS_AND_SCORING_INDEX.md) · [`factioninstructions.md`](./factioninstructions.md) (slash commands) · [`platform-game-faction-scoring.md`](./platform-game-faction-scoring.md) (implementation detail for `/playgame` and wars).
+
 ---
 
 ## Part 1: How Players Earn Points

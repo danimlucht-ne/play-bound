@@ -131,6 +131,8 @@ const SystemSchema = new mongoose.Schema({
     achievementChannel: { type: String, default: null },
     leaderboardChannel: { type: String, default: null },
     storyChannel: { type: String, default: null },
+    /** Join/leave audit log (text channel id); posts only when automated posts are on. */
+    memberLogChannel: { type: String, default: null },
     managerRoleId: { type: String, default: null },
     /** When true, any member may use listed game slash commands (not only Admin / Manager). */
     allowMemberHostedGames: { type: Boolean, default: false },

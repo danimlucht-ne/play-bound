@@ -68,36 +68,28 @@ function registerGuildEvents(client) {
             console.error(`[guildMemberAdd] Faction role sync ${m.id} in ${guildId}:`, e.message);
         }
 
-        // Member log channel
-        if (config.memberLogChannel && automatedServerPostsEnabled(config)) {
-            const logCh = client.channels.cache.get(config.memberLogChannel);
-            if (logCh) {
-                const created = m.user.createdAt;
-                const age = created ? `<t:${Math.floor(created.getTime() / 1000)}:R>` : 'unknown';
-                logCh.send({
-                    embeds: [new EmbedBuilder()
-                        .setColor('#2dd4bf')
-                        .setTitle('\ud83d\udfe2 Member Joined')
-                        .setDescription(`<@${m.id}> (${m.user.tag})\nAccount created: ${age}`)
-                        .setThumbnail(m.user.displayAvatarURL({ size: 64 }))
-                        .setTimestamp()],
-                }).catch(() => {});
+        if (config.welcomeChannel) {
+            addScore(client, guildId, m.id, 5);
+
+            let wMsg = "👋 **Welcome <@" + m.id + ">!** Type `/help` to play!\n\nWe've started you off with **5 Credits**. You can earn more by winning games, participating in events, and even setting your birthday with `/set_birthday`!";
+            if (config.welcomeMessages && config.welcomeMessages.length > 0) {
+                wMsg = config.welcomeMessages[Math.floor(Math.random() * config.welcomeMessages.length)].replace(/\{user\}/g, "<@" + m.id + ">");
+            } else if (config.welcomeMessage) {
+                wMsg = config.welcomeMessage.replace(/\{user\}/g, "<@" + m.id + ">");
+            }
+
+            if (automatedServerPostsEnabled(config)) {
+                client.channels.cache.get(config.welcomeChannel)?.send(wMsg);
             }
         }
 
-        if (!config.welcomeChannel) return;
-
-        addScore(client, guildId, m.id, 5);
-
-        let wMsg = "👋 **Welcome <@" + m.id + ">!** Type `/help` to play!\n\nWe've started you off with **5 Credits**. You can earn more by winning games, participating in events, and even setting your birthday with `/set_birthday`!";
-        if (config.welcomeMessages && config.welcomeMessages.length > 0) {
-            wMsg = config.welcomeMessages[Math.floor(Math.random() * config.welcomeMessages.length)].replace(/\{user\}/g, "<@" + m.id + ">");
-        } else if (config.welcomeMessage) {
-            wMsg = config.welcomeMessage.replace(/\{user\}/g, "<@" + m.id + ">");
-        }
-
-        if (automatedServerPostsEnabled(config)) {
-            client.channels.cache.get(config.welcomeChannel)?.send(wMsg);
+        if (config.memberLogChannel && automatedServerPostsEnabled(config)) {
+            const logCh = client.channels.cache.get(config.memberLogChannel);
+            const tag = m.user?.tag ?? m.user?.username ?? m.id;
+            logCh?.send({
+                content: `📥 **Joined:** <@${m.id}> (${tag}) — **${m.guild.memberCount}** members`,
+                allowedMentions: { users: [m.id] },
+            });
         }
         });
     });
@@ -105,23 +97,16 @@ function registerGuildEvents(client) {
     client.on('guildMemberRemove', async (m) => {
         const guildId = m.guild.id;
         await mongoRouter.runWithGuild(guildId, async () => {
-        // Member log channel
-        try {
-            const config = await getSystemConfig(guildId);
-            if (config.memberLogChannel && automatedServerPostsEnabled(config)) {
-                const logCh = client.channels.cache.get(config.memberLogChannel);
-                if (logCh) {
-                    logCh.send({
-                        embeds: [new EmbedBuilder()
-                            .setColor('#ef4444')
-                            .setTitle('\ud83d\udd34 Member Left')
-                            .setDescription(`<@${m.id}> (${m.user?.tag || m.id})`)
-                            .setThumbnail(m.user?.displayAvatarURL?.({ size: 64 }) || null)
-                            .setTimestamp()],
-                    }).catch(() => {});
-                }
-            }
-        } catch (_) {}
+        const configLeave = await getSystemConfig(guildId);
+        if (configLeave.memberLogChannel && automatedServerPostsEnabled(configLeave)) {
+            const logCh = client.channels.cache.get(configLeave.memberLogChannel);
+            const tag = m.user?.tag ?? m.user?.username ?? m.id;
+            const who = m.user ? `<@${m.id}> (\`${tag}\`)` : `\`${m.id}\``;
+            logCh?.send({
+                content: `📤 **Left:** ${who} — **${m.guild.memberCount}** members`,
+                allowedMentions: m.user ? { users: [m.id] } : { parse: [] },
+            });
+        }
         try {
             const userDoc = await User.findOne({ guildId, userId: m.id });
             if (userDoc?.faction) {

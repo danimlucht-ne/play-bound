@@ -2,6 +2,8 @@
 
 **Last Updated:** April 3, 2026
 
+> **Publishing:** To change live policy pages, version strings, and Discord re-acceptance, follow **`UPDATING_LEGAL_DOCUMENTS.md`** at the repository root (next to `README.md`).
+
 Welcome to PlayBound! By inviting the PlayBound bot to your Discord server or using any of its features, you agree to these Terms of Service ("Terms"). If you do not agree, please do not use the bot.
 
 ---

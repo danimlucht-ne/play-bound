@@ -61,6 +61,7 @@ const {
     getLegalPolicyAdminSnapshot,
     invalidateLegalVersionCache,
 } = require('../../../lib/legalPolicyVersions');
+const { getRuntimeLogSnapshot } = require('../../../lib/processLogCapture');
 
 const DAY_MS = 86400000;
 
@@ -1383,6 +1384,26 @@ function createAdminPanelRouter() {
         } catch (e) {
             console.error('[API] DELETE /api/admin/legal-policy', e);
             res.status(500).json({ error: 'legal_policy_delete_failed', message: e.message || String(e) });
+        }
+    });
+
+    router.get('/runtime-logs', (req, res) => {
+        if (!req.pbSession.isDeveloper) {
+            return res.status(403).json({ error: 'developer_only' });
+        }
+        try {
+            const afterSeq = req.query.afterSeq != null ? Number(req.query.afterSeq) : 0;
+            const limit = req.query.limit != null ? Number(req.query.limit) : 400;
+            const snap = getRuntimeLogSnapshot({ afterSeq, limit });
+            res.json({
+                ...snap,
+                disclaimer:
+                    'In-memory buffer for this Node process only (since last restart). Full history stays in PM2/systemd log files on the host.',
+                cachedAt: new Date().toISOString(),
+            });
+        } catch (e) {
+            console.error('[API] GET /api/admin/runtime-logs', e);
+            res.status(500).json({ error: 'runtime_logs_unavailable' });
         }
     });
 

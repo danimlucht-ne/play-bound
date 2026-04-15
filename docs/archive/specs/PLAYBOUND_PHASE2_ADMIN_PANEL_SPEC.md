@@ -1,5 +1,7 @@
 # PlayBound Phase 2 — gated admin panel (full specification)
 
+> **Status: shipped (historical).** Archived under `docs/archive/specs/`.
+
 **Depends on:** [PLAYBOUND_SINGLE_PAGE_LANDING_SPEC.md](./PLAYBOUND_SINGLE_PAGE_LANDING_SPEC.md) (Phase 1 — public single-screen marketing).  
 **UI repo:** `lucht_applications`  
 **Backend repo:** `discord-bot-games`

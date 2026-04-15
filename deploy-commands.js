@@ -7,8 +7,8 @@ const { FACTION_SLASH_CHOICES } = require('./lib/globalFactions');
 /** When `1`, registers dev-only slash pieces (e.g. `/playgame ignore_rotation`). Omit in production deploy. */
 const INCLUDE_DEV_PLAYGAME_EXTRAS = process.env.PLAYBOUND_REGISTER_DEV_SLASH_OPTIONS === '1';
 
-/** Faction dropdown: legacy + 15 platform tags (omit one social tag to stay ≤25 with “all”). */
-const FACTION_PLATFORM_GAME_CHOICES = PLATFORM_GAME_TAGS.filter((t) => t !== 'vote_the_winner').map((t) => ({
+/** Faction dropdown: legacy + platform tags that count toward war scoring (Discord max 25 choices with fixed rows + “all”). */
+const FACTION_PLATFORM_GAME_CHOICES = PLATFORM_GAME_TAGS.filter((t) => GAME_REGISTRY[t]?.warScoringEligible === true).map((t) => ({
     name: String(GAME_REGISTRY[t].displayName).slice(0, 100),
     value: t,
 }));
@@ -64,11 +64,11 @@ const commands = [
         ),
     new SlashCommandBuilder().setName('set_welcome_channel').setDescription('Channel for new members.').addChannelOption(o => o.setName('channel').setDescription('Channel to use')),
     new SlashCommandBuilder().setName('add_welcome_message').setDescription('Add a welcome message to rotation (use {user} for mention).').addStringOption(o => o.setName('message').setDescription('The message').setRequired(true)),
-    new SlashCommandBuilder().setName('remove_welcome_message').setDescription('Remove a welcome message from rotation.').addStringOption(o => o.setName('message').setDescription('Pick the message to remove').setRequired(true).setAutocomplete(true)),
+    new SlashCommandBuilder().setName('remove_welcome_message').setDescription('Remove a welcome message from rotation.').addIntegerOption(o => o.setName('index').setDescription('The index of the message to remove').setRequired(true)),
     new SlashCommandBuilder().setName('list_welcome_messages').setDescription('List all welcome messages in rotation.'),
     new SlashCommandBuilder().setName('set_birthday_channel').setDescription('Channel for birthdays.').addChannelOption(o => o.setName('channel').setDescription('Channel to use')),
     new SlashCommandBuilder().setName('add_birthday_message').setDescription('Add a birthday message to rotation (use {user} for mention).').addStringOption(o => o.setName('message').setDescription('The message').setRequired(true)),
-    new SlashCommandBuilder().setName('remove_birthday_message').setDescription('Remove a birthday message from rotation.').addStringOption(o => o.setName('message').setDescription('Pick the message to remove').setRequired(true).setAutocomplete(true)),
+    new SlashCommandBuilder().setName('remove_birthday_message').setDescription('Remove a birthday message from rotation.').addIntegerOption(o => o.setName('index').setDescription('The index of the message to remove').setRequired(true)),
     new SlashCommandBuilder().setName('list_birthday_messages').setDescription('List all birthday messages in rotation.'),
     new SlashCommandBuilder().setName('set_achievement_channel').setDescription('Channel for achievement announcements.').addChannelOption(o => o.setName('channel').setDescription('Channel to use')),
     new SlashCommandBuilder().setName('set_leaderboard_channel').setDescription('Channel for the server leaderboard message.').addChannelOption(o => o.setName('channel').setDescription('Channel to use')),
@@ -88,7 +88,16 @@ const commands = [
         .addBooleanOption(o => o.setName('clear').setDescription('Reset to built-in: all games, top-5 average, top_n=5'))
         .addStringOption(o => o.setName('game_type').setDescription('Default game filter for new wars')
             .addChoices(
-                { name: 'All platform mini-games', value: 'all' },
+                { name: 'All tagged mini-games', value: 'all' },
+                { name: 'Trivia', value: 'trivia' },
+                { name: 'Trivia Sprint', value: 'triviasprint' },
+                { name: 'Serverdle', value: 'serverdle' },
+                { name: 'Guess the Number', value: 'guessthenumber' },
+                { name: 'TV & Movie Quotes', value: 'moviequotes' },
+                { name: 'Unscramble', value: 'unscramble' },
+                { name: 'Caption', value: 'caption' },
+                { name: 'Name That Tune', value: 'namethattune' },
+                { name: 'Spelling Bee', value: 'spellingbee' },
                 ...FACTION_PLATFORM_GAME_CHOICES,
             ))
         .addStringOption(o => o.setName('scoring_mode').setDescription('Default scoring for new wars')
@@ -98,6 +107,10 @@ const commands = [
                 { name: 'Top N average', value: 'top_n_avg' },
             ))
         .addIntegerOption(o => o.setName('top_n').setDescription('Default top N for top_n_avg mode').setMinValue(1).setMaxValue(50)),
+    new SlashCommandBuilder().setName('set_faction_ranked_rules').setDescription('Defaults for official ranked wars: roster cap & per-tag score caps (Administrator or Bot Manager).')
+        .addBooleanOption(o => o.setName('clear').setDescription('Clear server ranked defaults (roster + caps)'))
+        .addIntegerOption(o => o.setName('default_roster_cap').setDescription('When ranked create omits max_per_team (1–25)').setMinValue(1).setMaxValue(25))
+        .addStringOption(o => o.setName('contribution_caps').setDescription('Counted cap per tag, e.g. trivia:500,unscramble:200')),
     new SlashCommandBuilder().setName('set_story_channel').setDescription('Channel for the One-Word Story game.').addChannelOption(o => o.setName('channel').setDescription('Channel to use')),
     new SlashCommandBuilder().setName('set_member_log_channel').setDescription('Channel for member join/leave log (omit channel to disable).').addChannelOption(o => o.setName('channel').setDescription('Text channel (omit to turn off)')),
     new SlashCommandBuilder().setName('set_manager_role').setDescription('Designate a role that can use bot manager commands.').addRoleOption(o => o.setName('role').setDescription('Role to allow')),
@@ -334,7 +347,7 @@ const commands = [
                     .setDescription('Dev-only: false = today’s pool; true/omit = any enabled game'),
             );
         }
-        return b;
+        return b.addStringOption((o) => o.setName('thread_name').setDescription(THREAD_NAME_OPT_DESC));
     })(),
     new SlashCommandBuilder().setName('faction_challenge').setDescription('Premium: official ranked faction wars (global match points).')
         .addSubcommand(sc => sc.setName('create').setDescription('Start a duel (Premium + Admin/Manager/Faction Leader). Max 3 wars/server/UTC day; ≤8h.')
@@ -343,26 +356,43 @@ const commands = [
             .addStringOption(o => o.setName('faction_b').setDescription('Opponent faction (omit both for auto rotation)').setRequired(false).addChoices(...FACTION_SLASH_CHOICES))
             .addStringOption(o => o.setName('game_type').setDescription('Which games count toward this war')
                 .addChoices(
-                    { name: 'All platform mini-games', value: 'all' },
+                    { name: 'All tagged mini-games', value: 'all' },
+                    { name: 'Trivia', value: 'trivia' },
+                    { name: 'Trivia Sprint', value: 'triviasprint' },
+                    { name: 'Serverdle', value: 'serverdle' },
+                    { name: 'Guess the Number', value: 'guessthenumber' },
+                    { name: 'TV & Movie Quotes', value: 'moviequotes' },
+                    { name: 'Unscramble', value: 'unscramble' },
+                    { name: 'Caption', value: 'caption' },
+                    { name: 'Name That Tune', value: 'namethattune' },
+                    { name: 'Spelling Bee', value: 'spellingbee' },
                     ...FACTION_PLATFORM_GAME_CHOICES,
                 ))
-            )
+            .addIntegerOption(o => o.setName('max_per_team').setDescription('Roster cap per side (default from server ranked rules or 7)').setMinValue(1).setMaxValue(25))
+            .addStringOption(o => o.setName('contribution_caps').setDescription('Optional per-tag score ceiling (ranked), e.g. trivia:800 — stops one minigame from dominating')))
         .addSubcommand(sc => sc.setName('create_royale').setDescription('All-factions royale (same rules as duel). Max 3 wars/server/UTC day; ≤8h.')
             .addIntegerOption(o => o.setName('duration_hours').setDescription('War length in hours (max 8)').setRequired(true).setMinValue(1).setMaxValue(8))
             .addStringOption(o => o.setName('game_type').setDescription('Which games count toward this war')
                 .addChoices(
-                    { name: 'All platform mini-games', value: 'all' },
+                    { name: 'All tagged mini-games', value: 'all' },
+                    { name: 'Trivia', value: 'trivia' },
+                    { name: 'Trivia Sprint', value: 'triviasprint' },
+                    { name: 'Serverdle', value: 'serverdle' },
+                    { name: 'Guess the Number', value: 'guessthenumber' },
+                    { name: 'TV & Movie Quotes', value: 'moviequotes' },
+                    { name: 'Unscramble', value: 'unscramble' },
+                    { name: 'Caption', value: 'caption' },
+                    { name: 'Name That Tune', value: 'namethattune' },
+                    { name: 'Spelling Bee', value: 'spellingbee' },
                     ...FACTION_PLATFORM_GAME_CHOICES,
                 ))
-            )
+            .addIntegerOption(o => o.setName('max_per_team').setDescription('Roster cap per faction (default from server ranked rules or 7)').setMinValue(1).setMaxValue(25))
+            .addStringOption(o => o.setName('contribution_caps').setDescription('Optional per-tag score ceiling (ranked), e.g. trivia:800')))
         .addSubcommand(sc => sc.setName('join').setDescription('Enroll to score for your faction in the active challenge'))
-        .addSubcommand(sc => sc.setName('status').setDescription('View scores for the active challenge')
-            .addBooleanOption(o => o.setName('all').setDescription('Show all active wars')))
+        .addSubcommand(sc => sc.setName('status').setDescription('View scores for the active challenge'))
         .addSubcommand(sc => sc.setName('history').setDescription('Past ended challenges in this server (newest first). Premium: up to 25.')
             .addIntegerOption(o => o.setName('limit').setDescription('How many (default 10; Premium up to 25)').setMinValue(1).setMaxValue(25)))
-        .addSubcommand(sc => sc.setName('end').setDescription('End the active challenge now (Premium + Admin/Manager/Faction Leader).')
-            .addBooleanOption(o => o.setName('all').setDescription('End all active wars'))
-            .addStringOption(o => o.setName('faction').setDescription('End the war for this faction').addChoices(...FACTION_SLASH_CHOICES))),
+        .addSubcommand(sc => sc.setName('end').setDescription('End the active challenge now (Premium + Admin/Manager/Faction Leader).')),
     new SlashCommandBuilder().setName('add_redirect').setDescription('Add an auto-reply word redirect.')
         .addStringOption(o => o.setName('words').setDescription('Comma-separated list of trigger words').setRequired(true))
         .addChannelOption(o => o.setName('channel').setDescription('The channel to redirect to'))
@@ -502,65 +532,18 @@ const commands = [
 /** For tooling (e.g. `scripts/generate-slash-readme-tables.js`) without hitting Discord. */
 module.exports = { commands };
 
-/** Command names that should only be registered to the dev/test guild. */
-const DEV_ONLY_NAMES = new Set([
-    'admin_premium', 'premium_analytics', 'broadcast', 'dev_points',
-    'bootstrap_support_server', 'setup_panels', 'wipe_panel_channels',
-    'wipe_bootstrap_messages', 'wipe_all_managed_channels',
-]);
-
-/** Command names that require Administrator (hidden from regular users in the slash menu). */
-const ADMIN_ONLY_NAMES = new Set([
-    'set_announcement_channel', 'set_announce_everyone', 'set_automated_posts',
-    'set_welcome_channel', 'add_welcome_message', 'remove_welcome_message', 'list_welcome_messages',
-    'set_birthday_channel', 'add_birthday_message', 'remove_birthday_message', 'list_birthday_messages',
-    'set_achievement_channel', 'set_leaderboard_channel', 'set_leaderboard_cadence',
-    'set_faction_reminder_channel', 'set_faction_victory_role', 'set_faction_leader_role',
-    'set_faction_challenge_defaults', 'set_story_channel', 'set_member_log_channel',
-    'set_manager_role', 'set_auto_role', 'remove_auto_role', 'sync_auto_role', 'strip_role',
-    'set_member_game_hosts', 'schedule_announcement', 'endgame', 'listgames',
-    'wipe_leaderboard', 'adjustpoints', 'server_shop_add', 'server_shop_remove',
-    'add_redirect', 'remove_redirect', 'set_role_reward', 'achievement',
-    'faction_role_link', 'faction_rename', 'faction_emoji', 'blacklist', 'unblacklist',
-]);
-
 if (require.main === module) {
     const rest = new REST({ version: '10' }).setToken(process.env.DISCORD_TOKEN);
-    const clientId = process.env.CLIENT_ID;
-    const devGuildIds = (process.env.PLAYBOUND_TEST_GUILD_IDS || '')
-        .split(',')
-        .map((s) => s.trim())
-        .filter(Boolean);
 
     (async () => {
         try {
-            // Apply admin permission gate to admin-only commands
-            const processed = commands.map((cmd) => {
-                if (ADMIN_ONLY_NAMES.has(cmd.name) && !cmd.default_member_permissions) {
-                    cmd.default_member_permissions = String(PermissionFlagsBits.Administrator);
-                }
-                return cmd;
-            });
-
-            // Split: dev-only go to test guild, everything else goes global
-            const globalCmds = processed.filter((c) => !DEV_ONLY_NAMES.has(c.name));
-            const devCmds = processed.filter((c) => DEV_ONLY_NAMES.has(c.name));
-
-            console.log(`Registering ${globalCmds.length} global commands...`);
-            await rest.put(Routes.applicationCommands(clientId), { body: globalCmds });
-            console.log(`Global commands registered.`);
-
-            if (devGuildIds.length > 0 && devCmds.length > 0) {
-                for (const gid of devGuildIds) {
-                    console.log(`Registering ${devCmds.length} dev-only commands to guild ${gid}...`);
-                    await rest.put(Routes.applicationGuildCommands(clientId, gid), { body: devCmds });
-                }
-                console.log(`Dev guild commands registered.`);
-            } else if (devCmds.length > 0) {
-                console.log(`Skipping ${devCmds.length} dev-only commands (no PLAYBOUND_TEST_GUILD_IDS set).`);
-            }
-
-            console.log('Done.');
+            console.log('Started refreshing application (/) commands.');
+            // This registers commands GLOBALLY for all servers
+            await rest.put(
+                Routes.applicationCommands(process.env.CLIENT_ID),
+                { body: commands },
+            );
+            console.log('Successfully reloaded application (/) commands.');
         } catch (error) {
             console.error(error);
         }

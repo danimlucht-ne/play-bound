@@ -2,6 +2,8 @@
 
 How faction-related slash commands work and what each parameter means.
 
+**See also:** [`FACTIONS_AND_SCORING_INDEX.md`](./FACTIONS_AND_SCORING_INDEX.md) · [`SCORING_GUIDE.md`](./SCORING_GUIDE.md) · [`platform-game-faction-scoring.md`](./platform-game-faction-scoring.md).
+
 ---
 
 ## Big picture

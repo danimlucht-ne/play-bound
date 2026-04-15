@@ -2,6 +2,8 @@
 
 This document describes **exactly** how PlayBound turns a `/playgame` session into (1) **server Credits / leaderboard points** and (2) **faction challenge / war** tallies, including how **top‑5 average** works for games like **Reaction Rush** and how **roster size** (5 vs 100 members) matters.
 
+**See also:** [`FACTIONS_AND_SCORING_INDEX.md`](./FACTIONS_AND_SCORING_INDEX.md) · [`SCORING_GUIDE.md`](./SCORING_GUIDE.md) (player-facing tables) · [`factioninstructions.md`](./factioninstructions.md) (commands).
+
 Implementation references (current codebase):
 
 - Session end → `games/platformPlay.js` → `finishSession` → `capBase` → `awardPlatformGameScore` → `lib/db.js` → `addScore` → `lib/factionChallenge.js` → `recordFactionChallengePoints`
