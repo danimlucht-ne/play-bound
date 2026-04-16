@@ -329,6 +329,25 @@ const commands = [
     new SlashCommandBuilder().setName('faction_balance').setDescription('Members per faction in this server. Premium: local % split.'),
     new SlashCommandBuilder().setName('factions').setDescription('Official Faction Rankings (ranked wars). Premium: extra context for your faction.'),
     new SlashCommandBuilder().setName('season').setDescription('Quarterly faction season (UTC). Premium: your faction’s quarterly placement.'),
+    new SlashCommandBuilder()
+        .setName('missions')
+        .setDescription('Daily & weekly missions (UTC). Rewards: Credits / season XP / cosmetic currency — not war score.'),
+    new SlashCommandBuilder().setName('claim_mission_rewards').setDescription('Claim completed mission rewards.'),
+    new SlashCommandBuilder().setName('featured').setDescription('Today’s featured games (UTC rotation: casual + ranked highlights).'),
+    new SlashCommandBuilder().setName('warstatus').setDescription('Active faction war: phase, timers, rules, and current leader.'),
+    new SlashCommandBuilder()
+        .setName('engagement_admin')
+        .setDescription('Inspect missions & rotation (Administrator or Bot Manager).')
+        .addSubcommand((s) => s.setName('ranked_tags').setDescription('Tags that can credit official ranked wars'))
+        .addSubcommand((s) => s.setName('featured_rotation').setDescription('Today’s platform rotation JSON'))
+        .addSubcommand((s) => s.setName('war_config').setDescription('Active war phase / final-hour settings'))
+        .addSubcommand((s) => s.setName('mission_definitions').setDescription('Mission definition rows'))
+        .addSubcommand((s) =>
+            s
+                .setName('mission_progress')
+                .setDescription('Recent mission progress for a member')
+                .addUserOption((o) => o.setName('user').setDescription('Member (default: you)')),
+        ),
     (() => {
         const b = new SlashCommandBuilder()
             .setName('playgame')
@@ -369,7 +388,24 @@ const commands = [
                     ...FACTION_PLATFORM_GAME_CHOICES,
                 ))
             .addIntegerOption(o => o.setName('max_per_team').setDescription('Roster cap per side (default from server ranked rules or 7)').setMinValue(1).setMaxValue(25))
-            .addStringOption(o => o.setName('contribution_caps').setDescription('Optional per-tag score ceiling (ranked), e.g. trivia:800 — stops one minigame from dominating')))
+            .addStringOption(o => o.setName('contribution_caps').setDescription('Optional per-tag score ceiling (ranked), e.g. trivia:800 — stops one minigame from dominating'))
+            .addIntegerOption((o) =>
+                o.setName('prep_minutes').setDescription('Prep before scoring opens (0 = none)').setMinValue(0).setMaxValue(120),
+            )
+            .addIntegerOption((o) =>
+                o.setName('final_hour_minutes').setDescription('Final phase length in minutes (default 60)').setMinValue(5).setMaxValue(240),
+            )
+            .addStringOption((o) =>
+                o
+                    .setName('final_hour_mode')
+                    .setDescription('Ledger-based final-hour aggregation (ranked)')
+                    .addChoices(
+                        { name: 'Off (legacy single-phase)', value: 'none' },
+                        { name: 'Top-5 final slice', value: 'top5_only' },
+                        { name: 'Weighted top-5', value: 'weighted_top5' },
+                        { name: 'Featured tags only (final slice)', value: 'featured_only' },
+                    ),
+            ))
         .addSubcommand(sc => sc.setName('create_royale').setDescription('All-factions royale (same rules as duel). Max 3 wars/server/UTC day; ≤8h.')
             .addIntegerOption(o => o.setName('duration_hours').setDescription('War length in hours (max 8)').setRequired(true).setMinValue(1).setMaxValue(8))
             .addStringOption(o => o.setName('game_type').setDescription('Which games count toward this war')
@@ -387,7 +423,24 @@ const commands = [
                     ...FACTION_PLATFORM_GAME_CHOICES,
                 ))
             .addIntegerOption(o => o.setName('max_per_team').setDescription('Roster cap per faction (default from server ranked rules or 7)').setMinValue(1).setMaxValue(25))
-            .addStringOption(o => o.setName('contribution_caps').setDescription('Optional per-tag score ceiling (ranked), e.g. trivia:800')))
+            .addStringOption(o => o.setName('contribution_caps').setDescription('Optional per-tag score ceiling (ranked), e.g. trivia:800'))
+            .addIntegerOption((o) =>
+                o.setName('prep_minutes').setDescription('Prep before scoring opens (0 = none)').setMinValue(0).setMaxValue(120),
+            )
+            .addIntegerOption((o) =>
+                o.setName('final_hour_minutes').setDescription('Final phase length in minutes (default 60)').setMinValue(5).setMaxValue(240),
+            )
+            .addStringOption((o) =>
+                o
+                    .setName('final_hour_mode')
+                    .setDescription('Ledger-based final-hour aggregation (ranked)')
+                    .addChoices(
+                        { name: 'Off (legacy single-phase)', value: 'none' },
+                        { name: 'Top-5 final slice', value: 'top5_only' },
+                        { name: 'Weighted top-5', value: 'weighted_top5' },
+                        { name: 'Featured tags only (final slice)', value: 'featured_only' },
+                    ),
+            ))
         .addSubcommand(sc => sc.setName('join').setDescription('Enroll to score for your faction in the active challenge'))
         .addSubcommand(sc => sc.setName('status').setDescription('View scores for the active challenge'))
         .addSubcommand(sc => sc.setName('history').setDescription('Past ended challenges in this server (newest first). Premium: up to 25.')

@@ -35,6 +35,10 @@ const {
     RecurringGame,
     Faction,
     FactionChallenge,
+    GamePlatformDay,
+    MissionProgress,
+    EngagementProfile,
+    DuelProfile,
     LeaderboardPeriodSnapshot,
     ReferralFirstGamePayout,
 } = require('../../models');
@@ -45,6 +49,7 @@ const {
     pickChallengeWinner,
     expireStaleChallenges,
     getActiveChallenge,
+    getWarPhase,
     isRoyale,
     getParticipantIds,
     isRosterFullForFaction,
@@ -165,7 +170,17 @@ const {
     BUILTIN_DEFAULT_TOPN,
 } = require('../../lib/factionChallengeDefaults');
 const { getSettings } = require('../../lib/gamePlatform/configStore');
-const { validateRankedChallengeGameSelection } = require('../../lib/gameClassification');
+const { validateRankedChallengeGameSelection, tagCreditsOfficialRankedWar } = require('../../lib/gameClassification');
+const { GAME_REGISTRY } = require('../../lib/gamePlatform/registry');
+const { utcDayString, ensureRotationForDate } = require('../../lib/gamePlatform/rotation');
+const { getPhaseBounds } = require('../../lib/engagement/warScoring');
+const {
+    onDuelMissionHook,
+    claimCompletedMissions,
+    listMissionBoard,
+    listMissionDefinitionsLean,
+} = require('../../lib/engagement/missions');
+const { recordDuelOutcome } = require('../../lib/engagement/duelRating');
 const {
     countFactionChallengesOfTypeToday,
     countFactionChallengesToday,
@@ -986,6 +1001,13 @@ if (interaction.isButton()) {
             : `❌ <@${interaction.user.id}> answered incorrectly!`;
 
         await interaction.update({ content: `⚔️ **DUEL OVER** ⚔️\n${resultMsg}\n\nThe correct answer was: **${duel.correctAnswer}**\n\n🏆 <@${winnerId}> wins the pot of **${duel.bet * 2} ${CREDITS}**!`, components: [] });
+        try {
+            await onDuelMissionHook({ guildId, winnerUserId: winnerId });
+            const loserId = winnerId === duel.challengerId ? duel.targetId : duel.challengerId;
+            await recordDuelOutcome(guildId, winnerId, loserId);
+        } catch (_) {
+            /* best-effort */
+        }
     }
 
     if (interaction.customId.startsWith('pb_aura_')) {
@@ -3044,7 +3066,7 @@ if (interaction.isButton()) {
                     value:
                         '**`/trivia`**, **`/triviasprint`**, **`/unscramble`**, **`/moviequotes`**, **`/namethattune`**, **`/caption`**, **`/spellingbee`**, **`/guessthenumber`**, **`/startserverdle`**, giveaways, etc. — **hosted** games for fun & server events.\n\nThey **do not** add points to **ranked** wars; casual / **unranked** challenges may still count them if configured.',
                 },
-                       { name: '⚔️ Duels & factions', value: '`/duel` — **1v1 trivia** (hosted). **Global faction** (`/faction join`).\n\n**`/factions`** = **Official Faction Rankings** (**ranked** war match points only). **`/faction server`** = server activity.\n\n**`/faction_challenge`** — **ranked** = **/playgame** only for scoring; **unranked** = local, hosted allowed if filter says so. **Premium** + manager/leader to create. `/set_faction_challenge_defaults`, `/set_faction_ranked_rules`, `/set_faction_leader_role`. **2 duels + 1 royale**/UTC day. `/faction_recruit` · `/leaderboard_history`.' },
+                       { name: '⚔️ Duels & factions', value: '`/duel` — **1v1 trivia** (hosted; duel rating is **separate** from war score). **Global faction** (`/faction join`).\n\n**`/factions`** = **Official Faction Rankings** (**ranked** war match points only). **`/faction server`** = server activity.\n\n**`/faction_challenge`** — **ranked** = **/playgame** only for scoring; **unranked** = local, hosted allowed if filter says so. **`/warstatus`** = phase & leader. **Premium** + manager/leader to create. `/set_faction_challenge_defaults`, `/set_faction_ranked_rules`, `/set_faction_leader_role`. **2 duels + 1 royale**/UTC day. `/faction_recruit` · `/leaderboard_history`.\n\n**`/missions`** · **`/claim_mission_rewards`** · **`/featured`** (UTC highlights).' },
                        { name: '📣 Grow', value: '`/invite` + `/invites`\n\nAdmin `/claim_referral` in new servers · `/invite_leaderboard`.' },
                        { name: '👤 Profile & shop', value: `\`/profile\` — scores, **faction** (server + official name), **badges** on **server activity** board, ledger.\n\n**Premium:** \`/profile user:@member\`.\n\n\`/leaderboard\` = **Server activity rankings** (**${CREDITS}**; not global faction board). Game \`points\` cap **${MAX_POINTS_PER_PLACEMENT}**. \`/inventory\` & \`/shop\` private.` },
                        { name: '🎁 Giveaways', value: 'Join active giveaways with the 🎉 button in game threads.' },
@@ -3669,8 +3691,135 @@ if (interaction.isButton()) {
                 });
             }
         }
+        const eng = await EngagementProfile.findOne({ guildId, userId: interaction.user.id }).lean();
+        if (eng && (eng.seasonXp > 0 || eng.cosmeticCurrency > 0)) {
+            embed.addFields({
+                name: '🎯 Seasonal progression (non-ranked)',
+                value: `Season XP: **${(eng.seasonXp || 0).toLocaleString()}** · Cosmetic tokens: **${(eng.cosmeticCurrency || 0).toLocaleString()}**`,
+                inline: false,
+            });
+        }
         embed.setFooter({ text: 'Year-end crowns sum all four quarters · playbound.app' });
         return interaction.reply({ embeds: [embed], ephemeral: true });
+    }
+
+    if (interaction.commandName === 'missions') {
+        const userM = await getUser(guildId, interaction.user.id);
+        const board = await listMissionBoard(guildId, interaction.user.id, userM.faction || null);
+        const embed = new EmbedBuilder()
+            .setTitle('🎯 Missions (UTC)')
+            .setColor(0x3498db)
+            .setDescription(
+                `**Day** \`${board.day}\` · **Week** \`${board.week}\`\n\n${board.lines.join('\n') || '—'}`.slice(0, 3900),
+            );
+        return interaction.reply({ embeds: [embed], ephemeral: true });
+    }
+
+    if (interaction.commandName === 'claim_mission_rewards') {
+        const userC = await getUser(guildId, interaction.user.id);
+        const { total, lines } = await claimCompletedMissions(guildId, interaction.user.id, userC.faction || null);
+        const msg = total
+            ? `✅ Claimed **${total}** reward(s):\n${lines.join('\n')}`
+            : 'No completed missions to claim — check `/missions` for progress.';
+        return interaction.reply({ content: msg.slice(0, 1900), ephemeral: true });
+    }
+
+    if (interaction.commandName === 'featured') {
+        const rot = await ensureRotationForDate();
+        const ranked = (rot.rankedFeaturedTags || []).map((t) => `\`${t}\``).join(', ') || '—';
+        const casual = rot.featuredTag ? `\`${rot.featuredTag}\`` : '—';
+        const pool = (rot.activeTags || []).join(', ') || '—';
+        return interaction.reply({
+            content:
+                `**UTC day** \`${rot.dayUtc}\`\n` +
+                `🌟 **Casual featured** (personal Credits bonus): ${casual}\n` +
+                `⚔️ **Ranked featured** (missions + **capped** war base bonus): ${ranked}\n` +
+                `📋 **Rotation pool**: ${pool}`,
+            ephemeral: true,
+        });
+    }
+
+    if (interaction.commandName === 'warstatus') {
+        await expireStaleChallenges(guildId, client);
+        const warCh = await getActiveChallenge(guildId);
+        if (!warCh) {
+            return interaction.reply({ content: 'No active faction war in this server.', ephemeral: true });
+        }
+        const phase = getWarPhase(warCh);
+        const scores = computeScores(warCh);
+        const teams = scores.teams || [];
+        const sorted = [...teams].sort((a, b) => b.value - a.value);
+        const lead = sorted[0];
+        const bounds = getPhaseBounds(warCh);
+        const leaderLine = lead ? `**${lead.name}** — **${Number(lead.value).toFixed(2)}** (${scores.label || 'score'})` : '—';
+        const second = sorted[1];
+        const runner = second ? `**${second.name}** — **${Number(second.value).toFixed(2)}**` : '';
+        return interaction.reply({
+            content:
+                `**Phase:** **${phase}** · **Final hour mode:** \`${warCh.finalHourMode || 'none'}\`\n` +
+                `**Prep ends:** <t:${Math.floor(bounds.prepEnds.getTime() / 1000)}:R> · **Final hour:** <t:${Math.floor(bounds.fhStart.getTime() / 1000)}:R> · **Ends:** <t:${Math.floor(new Date(warCh.endAt).getTime() / 1000)}:R>\n` +
+                `**Leading:** ${leaderLine}${runner ? `\n**Next:** ${runner}` : ''}\n` +
+                `_Official scoring uses **base** points only; ledger length **${(warCh.warPointLedger || []).length}**._`.slice(0, 1900),
+            ephemeral: true,
+        });
+    }
+
+    if (interaction.commandName === 'engagement_admin') {
+        const isAdmEa = interaction.member?.permissions?.has('Administrator');
+        const cfgEa = await getSystemConfig(guildId);
+        const hasMgrEa = cfgEa.managerRoleId && interaction.member?.roles?.cache?.has(cfgEa.managerRoleId);
+        if (!isAdmEa && !hasMgrEa && !isBotDeveloper(interaction.user.id)) {
+            return interaction.reply({ content: '❌ **Administrator** or **Bot Manager** only.', ephemeral: true });
+        }
+        const subEa = interaction.options.getSubcommand();
+        const settingsEa = await getSettings();
+        if (subEa === 'ranked_tags') {
+            const tags = Object.keys(GAME_REGISTRY).filter((t) => tagCreditsOfficialRankedWar(t, settingsEa));
+            return interaction.reply({ content: tags.sort().join(', ').slice(0, 1900) || '—', ephemeral: true });
+        }
+        if (subEa === 'featured_rotation') {
+            const rotEa = await ensureRotationForDate();
+            return interaction.reply({
+                content: `\`\`\`json\n${JSON.stringify(
+                    {
+                        dayUtc: rotEa.dayUtc,
+                        activeTags: rotEa.activeTags,
+                        featuredTag: rotEa.featuredTag,
+                        rankedFeaturedTags: rotEa.rankedFeaturedTags || [],
+                    },
+                    null,
+                    2,
+                )}\n\`\`\``.slice(0, 1900),
+                ephemeral: true,
+            });
+        }
+        if (subEa === 'war_config') {
+            await expireStaleChallenges(guildId, client);
+            const chEa = await getActiveChallenge(guildId);
+            if (!chEa) return interaction.reply({ content: 'No active war.', ephemeral: true });
+            const leanEa = await FactionChallenge.findById(chEa._id).lean();
+            const out = {
+                prepMinutes: leanEa.prepMinutes,
+                finalHourMinutes: leanEa.finalHourMinutes,
+                finalHourMode: leanEa.finalHourMode,
+                prepEndsAt: leanEa.prepEndsAt,
+                finalHourStartsAt: leanEa.finalHourStartsAt,
+                warFeaturedTags: leanEa.warFeaturedTags,
+                ledgerLength: (leanEa.warPointLedger || []).length,
+                phase: getWarPhase(leanEa),
+            };
+            return interaction.reply({ content: `\`\`\`json\n${JSON.stringify(out, null, 2)}\n\`\`\``.slice(0, 1900), ephemeral: true });
+        }
+        if (subEa === 'mission_definitions') {
+            const defsEa = await listMissionDefinitionsLean();
+            return interaction.reply({ content: `\`\`\`json\n${JSON.stringify(defsEa, null, 2)}\n\`\`\``.slice(0, 1900), ephemeral: true });
+        }
+        if (subEa === 'mission_progress') {
+            const targetU = interaction.options.getUser('user');
+            const uidP = targetU?.id || interaction.user.id;
+            const rowsP = await MissionProgress.find({ guildId, userId: uidP }).sort({ updatedAt: -1 }).limit(25).lean();
+            return interaction.reply({ content: `\`\`\`json\n${JSON.stringify(rowsP, null, 2)}\n\`\`\``.slice(0, 1900), ephemeral: true });
+        }
     }
 
     if (interaction.commandName === 'faction_challenge') {
@@ -3775,6 +3924,17 @@ if (interaction.isButton()) {
                 '\n\n**Official ranked war** — affects **global** standings (**match points**: win **+3**, tie **+1**). **Only /playgame** platform games can score; **hosted** commands (/trivia, etc.) never count.';
 
             const endAt = new Date(Date.now() + durationHrs * 3600000);
+            const prepMinutesCr = interaction.options.getInteger('prep_minutes') ?? 0;
+            const finalHourMinutesCr = interaction.options.getInteger('final_hour_minutes') ?? 60;
+            const finalHourModeCr = interaction.options.getString('final_hour_mode') ?? 'none';
+            const createNowCr = new Date();
+            const prepEndsAtCr = new Date(createNowCr.getTime() + Math.max(0, prepMinutesCr) * 60000);
+            let finalHourStartsAtCr = new Date(endAt.getTime() - Math.max(0, finalHourMinutesCr) * 60000);
+            if (finalHourStartsAtCr.getTime() < prepEndsAtCr.getTime()) finalHourStartsAtCr = prepEndsAtCr;
+            const platDayCr = await GamePlatformDay.findOne({ dayUtc: utcDayString() }).lean();
+            const warFeaturedTagsCr = [...new Set((platDayCr?.rankedFeaturedTags || []).map((t) => String(t).toLowerCase()))]
+                .filter(Boolean)
+                .slice(0, 8);
             await FactionChallenge.create({
                 guildId,
                 challengeMode,
@@ -3795,6 +3955,12 @@ if (interaction.isButton()) {
                 participantsA: [],
                 participantsB: [],
                 endAt,
+                prepMinutes: prepMinutesCr,
+                finalHourMinutes: finalHourMinutesCr,
+                finalHourMode: finalHourModeCr,
+                prepEndsAt: prepEndsAtCr,
+                finalHourStartsAt: finalHourStartsAtCr,
+                warFeaturedTags: warFeaturedTagsCr,
             });
             const matchupLineDuelLive = await formatFactionWarMatchupLine(configFc, {
                 isRoyale: false,
@@ -3906,6 +4072,17 @@ if (interaction.isButton()) {
                 '\n\n**Official ranked royale** — affects **global** standings (**match points**: win **+3**, shared ties **+1** where rules say so). **Only /playgame** games score; hosted commands never count.';
 
             const endAtR = new Date(Date.now() + durationHrsR * 3600000);
+            const prepMinutesR = interaction.options.getInteger('prep_minutes') ?? 0;
+            const finalHourMinutesR = interaction.options.getInteger('final_hour_minutes') ?? 60;
+            const finalHourModeR = interaction.options.getString('final_hour_mode') ?? 'none';
+            const createNowR = new Date();
+            const prepEndsAtR = new Date(createNowR.getTime() + Math.max(0, prepMinutesR) * 60000);
+            let finalHourStartsAtR = new Date(endAtR.getTime() - Math.max(0, finalHourMinutesR) * 60000);
+            if (finalHourStartsAtR.getTime() < prepEndsAtR.getTime()) finalHourStartsAtR = prepEndsAtR;
+            const platDayR = await GamePlatformDay.findOne({ dayUtc: utcDayString() }).lean();
+            const warFeaturedTagsR = [...new Set((platDayR?.rankedFeaturedTags || []).map((t) => String(t).toLowerCase()))]
+                .filter(Boolean)
+                .slice(0, 8);
             const participantsByFaction = new Map();
             for (const n of ROYALE_FACTIONS) participantsByFaction.set(n, []);
             await FactionChallenge.create({
@@ -3930,6 +4107,12 @@ if (interaction.isButton()) {
                 participantsA: [],
                 participantsB: [],
                 endAt: endAtR,
+                prepMinutes: prepMinutesR,
+                finalHourMinutes: finalHourMinutesR,
+                finalHourMode: finalHourModeR,
+                prepEndsAt: prepEndsAtR,
+                finalHourStartsAt: finalHourStartsAtR,
+                warFeaturedTags: warFeaturedTagsR,
             });
             const matchupLineRoyaleLive = await formatFactionWarMatchupLine(configFc, {
                 isRoyale: true,
@@ -4307,6 +4490,9 @@ if (interaction.isButton()) {
             /* user may have left the server */
         }
 
+        const engagementProf = await EngagementProfile.findOne({ guildId, userId: targetDiscord.id }).lean();
+        const duelProf = await DuelProfile.findOne({ guildId, userId: targetDiscord.id }).lean();
+
         let factionProfileField = null;
         if (profileUser.faction) {
             const profileFacDoc = await Faction.findOne({ name: profileUser.faction })
@@ -4341,6 +4527,35 @@ if (interaction.isButton()) {
             },
             ...(factionProfileField ? [factionProfileField] : []),
             { name: `${PROFILE_GLYPH.fire} Streak`, value: `**${profileUser.currentStreak || 0}** days`, inline: true },
+            ...(engagementProf &&
+            (engagementProf.displayTitle || engagementProf.favoriteGameTag || (engagementProf.seasonXp || 0) > 0)
+                ? [
+                      {
+                          name: '🎯 Identity',
+                          value: [
+                              engagementProf.displayTitle ? `Title: **${engagementProf.displayTitle}**` : null,
+                              engagementProf.favoriteGameTag
+                                  ? `Favorite /playgame: \`${engagementProf.favoriteGameTag}\``
+                                  : null,
+                              (engagementProf.seasonXp || 0) > 0
+                                  ? `Season XP: **${engagementProf.seasonXp}**`
+                                  : null,
+                          ]
+                              .filter(Boolean)
+                              .join('\n'),
+                          inline: true,
+                      },
+                  ]
+                : []),
+            ...(duelProf && (duelProf.wins > 0 || duelProf.losses > 0)
+                ? [
+                      {
+                          name: '⚔️ Duels (trivia)',
+                          value: `**W** ${duelProf.wins} · **L** ${duelProf.losses} · Streak **${duelProf.streak}** · Rating **${Math.round(duelProf.rating)}** _(not war score)_`,
+                          inline: true,
+                      },
+                  ]
+                : []),
             {
                 name: `${PROFILE_GLYPH.cake} Birthday`,
                 value: viewingSelf ? (profileUser.birthday || 'Not set') : `${PROFILE_GLYPH.mdash}`,

@@ -100,6 +100,16 @@ function loadInteractionCreate(overrides = {}) {
                     RecurringGame: {},
                     Faction: {},
                     FactionChallenge: {},
+                    GamePlatformDay: { findOne: async () => null },
+                    MissionProgress: {
+                        find: async () => [],
+                        findOne: async () => null,
+                        findOneAndUpdate: async () => {},
+                        updateOne: async () => {},
+                    },
+                    MissionDefinition: { find: async () => [], findOne: async () => null, findOneAndUpdate: async () => {} },
+                    EngagementProfile: { findOne: () => ({ lean: async () => null }) },
+                    DuelProfile: { findOne: () => ({ lean: async () => null }) },
                     LeaderboardPeriodSnapshot: {},
                     ReferralFirstGamePayout: {},
                 },
@@ -109,6 +119,7 @@ function loadInteractionCreate(overrides = {}) {
                 },
             [factionChallengePath]:
                 overrides.factionChallenge || {
+                    getWarPhase: () => 'active',
                     computeScores: () => [],
                     pickChallengeWinner: () => null,
                     expireStaleChallenges: async () => {},
@@ -345,6 +356,7 @@ function loadInteractionCreate(overrides = {}) {
             [gameClassificationPath]:
                 overrides.gameClassification || {
                     validateRankedChallengeGameSelection: () => {},
+                    tagCreditsOfficialRankedWar: () => false,
                 },
             [factionChallengeDailyLimitsPath]:
                 overrides.factionChallengeDailyLimits || {
@@ -3401,6 +3413,11 @@ test('profile gates non-premium peeks and renders a self profile embed', async (
                     }),
                 },
                 FactionChallenge: {},
+                GamePlatformDay: { findOne: async () => null },
+                MissionProgress: { find: async () => [], findOne: async () => null },
+                MissionDefinition: { find: async () => [], findOne: async () => null },
+                EngagementProfile: { findOne: () => ({ lean: async () => null }) },
+                DuelProfile: { findOne: () => ({ lean: async () => null }) },
                 LeaderboardPeriodSnapshot: {},
                 ReferralFirstGamePayout: {
                     countDocuments: async () => 0,

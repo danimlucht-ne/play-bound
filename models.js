@@ -359,6 +359,41 @@ const FactionChallengeSchema = new mongoose.Schema({
     warDurationMinutes: { type: Number, default: 30 },
     /** Channel where the war was created — used for posting results embed at war end. */
     channelId: { type: String, default: null },
+    /** Optional prep window after create (minutes). Legacy: 0 = skip prep. */
+    prepMinutes: { type: Number, default: 0 },
+    /** Length of final phase before endAt (minutes). */
+    finalHourMinutes: { type: Number, default: 60 },
+    /**
+     * Deterministic recomputation of team scores uses warPointLedger + these rules for the final window.
+     * `none` = single-phase scoring from scoresByUser (legacy behavior).
+     */
+    finalHourMode: {
+        type: String,
+        enum: ['none', 'top5_only', 'weighted_top5', 'featured_only'],
+        default: 'none',
+    },
+    /** Explicit phase boundary (set at create) — scoring counts only after this instant. */
+    prepEndsAt: { type: Date, default: null },
+    /** Start of final-hour window (set at create). */
+    finalHourStartsAt: { type: Date, default: null },
+    /** For featured_only final hour: which ranked platform tags count in that window. */
+    warFeaturedTags: { type: [String], default: [] },
+    /**
+     * Append-only audit of counted war points (ranked fairness / final-hour audit).
+     * Application caps length (see lib/factionChallenge.js).
+     */
+    warPointLedger: {
+        type: [
+            {
+                at: { type: Date, required: true },
+                userId: { type: String, required: true },
+                gameTag: { type: String, required: true },
+                counted: { type: Number, required: true },
+                raw: { type: Number, required: true },
+            },
+        ],
+        default: [],
+    },
 });
 
 FactionChallengeSchema.index({ guildId: 1, status: 1 });
@@ -470,6 +505,8 @@ const GamePlatformSettingsSchema = new mongoose.Schema({
     socialGamesRankedAllowed: { type: Boolean, default: false },
     /** Recent tag -> last featured dayUtc (cooldown hints) */
     lastFeaturedByTag: { type: Map, of: String, default: () => new Map() },
+    /** Capped flat add to **base** war ledger when `rankedFeaturedTags` matches (see engagement layer). */
+    rankedFeaturedWarBonusCap: { type: Number, default: 3 },
     updatedAt: { type: Date, default: Date.now },
 }, { collection: 'gameplatformsettings' });
 
@@ -478,6 +515,8 @@ const GamePlatformDaySchema = new mongoose.Schema({
     dayUtc: { type: String, required: true, unique: true },
     activeTags: { type: [String], default: [] },
     featuredTag: { type: String, default: null },
+    /** 1–2 extra ranked-eligible highlights for missions/UI (separate from casual featured bonus tag). */
+    rankedFeaturedTags: { type: [String], default: [] },
     /** tag -> count appearances in last N days (denormalized at compute time) */
     cooldownSnapshot: { type: mongoose.Schema.Types.Mixed, default: null },
     computedAt: { type: Date, default: Date.now },
@@ -585,6 +624,78 @@ const LegalPolicyConfigSchema = new mongoose.Schema(
 
 const { PremiumPromptEventSchema } = require('./models/PremiumPromptEvent');
 
+/** Personal + faction mission progress (UTC periods). */
+const MissionProgressSchema = new mongoose.Schema(
+    {
+        scope: { type: String, enum: ['user_daily', 'faction_daily', 'faction_weekly'], required: true },
+        guildId: { type: String, required: true },
+        userId: { type: String, default: null },
+        factionName: { type: String, default: null },
+        periodKey: { type: String, required: true },
+        missionKey: { type: String, required: true },
+        progress: { type: Number, default: 0 },
+        target: { type: Number, required: true },
+        completed: { type: Boolean, default: false },
+        claimed: { type: Boolean, default: false },
+        /** Faction-scope missions: each member may claim once while `completed`. */
+        claimedByUserIds: { type: [String], default: [] },
+        metaJson: { type: String, default: null },
+    },
+    { collection: 'mission_progress', timestamps: true },
+);
+
+MissionProgressSchema.index(
+    { scope: 1, guildId: 1, userId: 1, factionName: 1, periodKey: 1, missionKey: 1 },
+    { unique: true },
+);
+
+const DuelProfileSchema = new mongoose.Schema(
+    {
+        userId: { type: String, required: true },
+        guildId: { type: String, required: true },
+        wins: { type: Number, default: 0 },
+        losses: { type: Number, default: 0 },
+        streak: { type: Number, default: 0 },
+        rating: { type: Number, default: 1500 },
+    },
+    { collection: 'duel_profiles', timestamps: true },
+);
+
+DuelProfileSchema.index({ userId: 1, guildId: 1 }, { unique: true });
+
+const EngagementProfileSchema = new mongoose.Schema(
+    {
+        userId: { type: String, required: true },
+        guildId: { type: String, required: true },
+        seasonXp: { type: Number, default: 0 },
+        cosmeticCurrency: { type: Number, default: 0 },
+        favoriteGameTag: { type: String, default: null },
+        displayTitle: { type: String, default: null },
+    },
+    { collection: 'engagement_profiles', timestamps: true },
+);
+
+EngagementProfileSchema.index({ userId: 1, guildId: 1 }, { unique: true });
+
+const MissionDefinitionSchema = new mongoose.Schema(
+    {
+        missionKey: { type: String, required: true, unique: true },
+        scope: { type: String, enum: ['user_daily', 'faction_daily', 'faction_weekly'], required: true },
+        title: { type: String, required: true },
+        objectiveType: {
+            type: String,
+            enum: ['wins', 'plays', 'basePoints', 'duelWins', 'playVariety'],
+            required: true,
+        },
+        target: { type: Number, required: true },
+        rewardType: { type: String, enum: ['credits', 'season_xp', 'cosmetic_currency'], required: true },
+        rewardAmount: { type: Number, required: true },
+        /** When true, social / non-ranked platform tags can count toward this mission. */
+        allowBroaderPool: { type: Boolean, default: false },
+    },
+    { collection: 'mission_definitions', timestamps: true },
+);
+
 /**
  * Register all Mongoose models on a connection (prod/test or default for scripts).
  * @param {import('mongoose').Connection} connection
@@ -620,6 +731,10 @@ function registerModels(connection) {
         BotGuildInstallEvent: connection.model('BotGuildInstallEvent', BotGuildInstallEventSchema),
         PremiumPromptEvent: connection.model('PremiumPromptEvent', PremiumPromptEventSchema),
         LegalPolicyConfig: connection.model('LegalPolicyConfig', LegalPolicyConfigSchema),
+        MissionProgress: connection.model('MissionProgress', MissionProgressSchema),
+        DuelProfile: connection.model('DuelProfile', DuelProfileSchema),
+        EngagementProfile: connection.model('EngagementProfile', EngagementProfileSchema),
+        MissionDefinition: connection.model('MissionDefinition', MissionDefinitionSchema),
     };
 }
 

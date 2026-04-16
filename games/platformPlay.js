@@ -19,6 +19,9 @@ const {
 } = require('../lib/factionChallenge');
 const { FactionCreditReasonCode } = require('../lib/gameClassification');
 const { isBotDeveloper } = require('../lib/isBotDeveloper');
+const { playboundDebugLog } = require('../lib/playboundDebug');
+const { computeRankedFeaturedWarBonus } = require('../lib/engagement/rankedFeaturedWarBonus');
+const { onPlatformMissionHook } = require('../lib/engagement/missions');
 const { throwIfImmediateGameStartBlockedByMaintenance } = require('../lib/maintenanceScheduling');
 const { createPlatformGameThread, finalizeHostedGameThread } = require('../lib/gameThreadLifecycle');
 const { fetchOpenTdbMultipleChoice } = require('../lib/openTriviaFetch');
@@ -443,12 +446,30 @@ async function finishSession(client, session, factionBase, interaction, meta = {
         } catch (_) { /* best-effort */ }
     }
 
+    let warFeatBonus = 0;
+    if (session.isWarSession && countsForPoints) {
+        const cap = Number(settings.rankedFeaturedWarBonusCap);
+        const { bonus } = computeRankedFeaturedWarBonus({
+            basePoints: base,
+            gameTag: session.tag,
+            rankedFeaturedTags: rot.rankedFeaturedTags || [],
+            bonusCap: Number.isFinite(cap) ? cap : 3,
+        });
+        warFeatBonus = bonus;
+        if (warFeatBonus > 0) {
+            playboundDebugLog(
+                `[ranked-featured-war-bonus] guild=${session.guildId} user=${session.userId} tag=${session.tag} base=${base} bonus=${warFeatBonus}`,
+            );
+        }
+    }
+    const factionBaseForWar = base + warFeatBonus;
+
     const award = await awardPlatformGameScore({
         client,
         guildId: session.guildId,
         userId: session.userId,
         gameTag: session.tag,
-        factionBasePoints: base,
+        factionBasePoints: factionBaseForWar,
         interaction,
         hostIsPremium: session.hostAura,
         settingsDoc: settings,
@@ -458,6 +479,25 @@ async function finishSession(client, session, factionBase, interaction, meta = {
     });
     await recordSessionCompleted(session.tag, base, 0);
     sessions.delete(session.id);
+
+    if (countsForPoints) {
+        try {
+            const u = await getUser(session.guildId, session.userId);
+            await onPlatformMissionHook({
+                guildId: session.guildId,
+                userId: session.userId,
+                factionName: u.faction || null,
+                gameTag: session.tag,
+                settingsDoc: settings,
+                event: {
+                    kind: meta.won ? 'win' : 'play',
+                    basePoints: base,
+                },
+            });
+        } catch (_) {
+            /* best-effort */
+        }
+    }
 
     const fc = award?.factionChallengeCredit;
     const showWarHint = new Set([
