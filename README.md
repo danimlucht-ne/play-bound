@@ -2,6 +2,8 @@
 
 PlayBound is a **multi-server Discord bot** for community games, a **Credits** economy, **Arena score** (competitive ledger), **global factions**, **ranked and casual faction wars**, **referrals**, **Premium** perks, shops, scheduled content, and a companion **HTTP API** (Stripe webhooks, public stats, Discord OAuth session for the website).
 
+This repository is a **small monorepo**: the Discord bot and API live at the **repo root**; the static marketing / dashboard site lives in **`apps/web/`** (deployed separately, e.g. Vercel).
+
 ---
 
 ## Contents
@@ -48,6 +50,10 @@ The process loads **Discord**, **MongoDB**, and an **Express** app (Stripe webho
 |--------|---------|
 | `npm start` | Run the bot + HTTP server |
 | `npm test` | Node test runner (`tests/**/*.test.js`) |
+| `npm run web:build` | Build legal HTML from `apps/web/public/*.md` |
+| `npm run web:test:static` | Static checks + legal build for `apps/web` |
+| `npm run web:test:e2e` | Playwright tests for `apps/web` |
+| `npm run web:test` | Full site test (`test:static` + `test:e2e`) |
 | `npm run deploy:commands` | Register/update global slash commands |
 | `npm run check:syntax` | `node --check` on main entrypoints and libraries |
 | `npm run build:seed-words` | Build Serverdle word bank file for seeds |
@@ -90,7 +96,7 @@ Set these in `.env` (see `.env.example` for the full list and comments).
 | `DEVELOPER_ID` | Restricts dev-only commands (`/broadcast`, `/admin_premium`, …) |
 | `STRIPE_*`, `PAYMENT_PROVIDER` | Checkout + webhooks when using Stripe |
 | `PORT` | HTTP server port (default commonly `3000`) |
-| `PUBLIC_DIR` | Optional: serve static site (e.g. PlayBound marketing UI) from disk |
+| `PUBLIC_DIR` | Optional: serve static site from disk — use **`apps/web`** (repo root–relative) for the marketing UI in this monorepo |
 | Support server / channel IDs | For `/ticket`, `/setup_panels`, etc. |
 
 ---
@@ -272,9 +278,9 @@ Full tables lived in older README revisions; the **code** enforces rules in `lib
 - **Shipped landing + admin UI specs:** `docs/archive/specs/`
 - **Kiro feature specs (archived):** `docs/archive/kiro-specs/`
 
-### Marketing site (sibling repo)
+### Marketing site (`apps/web`)
 
-- **Web onboarding UI:** `lucht-applications/play-bound/README.md` (relative to parent `Programming` folder)
+- **Web onboarding UI, legal build, Playwright tests:** `apps/web/README.md`
 
 ---
 

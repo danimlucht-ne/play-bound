@@ -1,0 +1,21 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "cleanUrls": true,
+  "redirects": [
+    { "source": "/playbound-icon.png", "destination": "/playbound_icon.svg", "permanent": false },
+    { "source": "/playbound-banner.png", "destination": "/playbound_banner.svg", "permanent": false }
+  ],
+  "rewrites": [
+    {
+      "source": "/:path*",
+      "has": [
+        {
+          "type": "header",
+          "key": "accept",
+          "value": ".*(text/html|application/xhtml\\+xml).*"
+        }
+      ],
+      "destination": "/index.html"
+    }
+  ]
+}

@@ -43,29 +43,56 @@ function resolvedEnvPath(p) {
 }
 
 /**
- * Serve terms/privacy from optional drop-in paths (before static `PUBLIC_DIR`).
- * Priority: `LEGAL_TERMS_FILE` / `LEGAL_PRIVACY_FILE`, then `LEGAL_CONTENT_DIR/{terms|privacy}.html`.
+ * @param {string} filePath
+ * @returns {string}
+ */
+function contentTypeForLegalFile(filePath) {
+    const ext = path.extname(filePath).toLowerCase();
+    if (ext === '.txt' || ext === '.md') return 'text/plain; charset=utf-8';
+    return 'text/html; charset=utf-8';
+}
+
+/**
+ * Serve terms/privacy for the canonical URLs `/terms.html` and `/privacy.html`.
+ * Plain `.txt` / `.md` is supported so policies can be maintained without writing HTML.
+ *
+ * Priority: `LEGAL_TERMS_FILE` / `LEGAL_PRIVACY_FILE`, then `LEGAL_CONTENT_DIR`
+ * (`*.html` then `*.txt`), then `PUBLIC_DIR` (`*.html` then `*.txt`).
+ *
  * @param {import('express').Response} res
- * @param {'terms.html' | 'privacy.html'} basename
+ * @param {'terms' | 'privacy'} doc
+ * @param {string|null} resolvedPublic
+ * @param {boolean} hasPublic
  * @returns {boolean} true if a file was sent
  */
-function tryServeLegalPageFromEnv(res, basename) {
-    const envFile = basename === 'terms.html' ? process.env.LEGAL_TERMS_FILE : process.env.LEGAL_PRIVACY_FILE;
-    const direct = resolvedEnvPath(envFile);
-    if (direct && fs.existsSync(direct) && fs.statSync(direct).isFile()) {
-        res.type('text/html; charset=utf-8');
-        res.sendFile(path.resolve(direct));
+function tryServeLegalDocument(res, doc, resolvedPublic, hasPublic) {
+    const htmlBase = doc === 'terms' ? 'terms.html' : 'privacy.html';
+    const txtBase = doc === 'terms' ? 'terms.txt' : 'privacy.txt';
+    const envFile = doc === 'terms' ? process.env.LEGAL_TERMS_FILE : process.env.LEGAL_PRIVACY_FILE;
+
+    /** @param {string} absPath */
+    const tryFile = (absPath) => {
+        if (!absPath) return false;
+        if (!fs.existsSync(absPath) || !fs.statSync(absPath).isFile()) return false;
+        res.type(contentTypeForLegalFile(absPath));
+        res.sendFile(path.resolve(absPath));
         return true;
-    }
+    };
+
+    const direct = resolvedEnvPath(envFile);
+    if (tryFile(direct)) return true;
+
     const dir = resolvedEnvPath(process.env.LEGAL_CONTENT_DIR);
     if (dir && fs.existsSync(dir) && fs.statSync(dir).isDirectory()) {
-        const joined = path.join(dir, basename);
-        if (fs.existsSync(joined) && fs.statSync(joined).isFile()) {
-            res.type('text/html; charset=utf-8');
-            res.sendFile(path.resolve(joined));
-            return true;
-        }
+        if (tryFile(path.join(dir, htmlBase))) return true;
+        if (tryFile(path.join(dir, txtBase))) return true;
     }
+
+    if (hasPublic && resolvedPublic && fs.existsSync(resolvedPublic)) {
+        if (tryFile(path.join(resolvedPublic, htmlBase))) return true;
+        if (tryFile(path.join(resolvedPublic, txtBase))) return true;
+    }
+
     return false;
 }
 
@@ -92,6 +119,16 @@ function createHttpApp(botCtx) {
         legacyHeaders: false,
     });
     app.use(generalLimiter);
+
+    // Legal docs (env + optional plain text) before static — see `.env.example` LEGAL_* / LEGAL_CONTENT_DIR.
+    app.get('/terms.html', (req, res, next) => {
+        if (tryServeLegalDocument(res, 'terms', resolvedPublic, hasPublic)) return;
+        return hasPublic ? next() : res.status(404).type('text/plain').send('Not found');
+    });
+    app.get('/privacy.html', (req, res, next) => {
+        if (tryServeLegalDocument(res, 'privacy', resolvedPublic, hasPublic)) return;
+        return hasPublic ? next() : res.status(404).type('text/plain').send('Not found');
+    });
 
     if (hasPublic) {
         app.use(express.static(resolvedPublic));

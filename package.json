@@ -1,13 +1,21 @@
 {
   "name": "playbound",
   "version": "1.0.0",
-  "description": "A Discord bot for a number guessing game",
+  "private": true,
+  "description": "PlayBound Discord bot, HTTP API, and static marketing site (monorepo)",
   "main": "index.js",
+  "workspaces": [
+    "apps/web"
+  ],
   "engines": {
     "node": ">=20"
   },
   "scripts": {
     "start": "node index.js",
+    "web:build": "npm run build -w play-bound-site",
+    "web:test:static": "npm run test:static -w play-bound-site",
+    "web:test:e2e": "npm run test:e2e -w play-bound-site",
+    "web:test": "npm run test -w play-bound-site",
     "test": "node scripts/run-node-tests.js",
     "test:go-live": "npm run check:syntax && npm run check:syntax:ops && node scripts/run-node-tests.js",
     "test:db:integration": "node --test tests/db.integration.test.js",

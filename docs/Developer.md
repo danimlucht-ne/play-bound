@@ -48,7 +48,7 @@ LOCAL MACHINE
 1. Review the working tree
 
 ```bash
-cd /path/to/discord-bot-games
+cd /path/to/play-bound
 git status
 ```
 
@@ -66,7 +66,7 @@ VM / PRODUCTION SERVER
 1. Pull the new code
 
 ```bash
-cd /path/to/discord-bot-games
+cd /path/to/play-bound
 git pull origin main
 ```
 

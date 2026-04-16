@@ -1,9 +1,10 @@
-name: Discord Bot Games CI
+name: PlayBound CI
 
 on:
   push:
     paths:
       - ".github/workflows/ci.yml"
+      - "apps/web/**"
       - "deploy-commands.js"
       - "games/**"
       - "lib/**"
@@ -17,6 +18,7 @@ on:
   pull_request:
     paths:
       - ".github/workflows/ci.yml"
+      - "apps/web/**"
       - "deploy-commands.js"
       - "games/**"
       - "lib/**"
@@ -31,7 +33,7 @@ on:
 
 jobs:
   test:
-    name: Bot Test Gate
+    name: Bot + web
     runs-on: ubuntu-latest
 
     steps:
@@ -49,3 +51,13 @@ jobs:
 
       - name: Run go-live gate
         run: npm run test:go-live
+
+      - name: Marketing site (static + legal build)
+        run: npm run web:test:static
+
+      - name: Install Playwright Chromium
+        working-directory: apps/web
+        run: npx playwright install chromium --with-deps
+
+      - name: Marketing site (Playwright)
+        run: npm run web:test:e2e

@@ -7,7 +7,7 @@ Use this checklist whenever you change legal text or need everyone to accept aga
 | Piece | Role |
 |--------|------|
 | **Version strings** (terms + privacy) | The Discord bot compares these to each user’s stored `agreedTermsVersion` / `agreedPrivacyVersion`. If either string does not match exactly, the user sees the **Agreements Required** embed and must tap **Accept & Continue** before slash commands work. |
-| **Public HTML** (`terms.html`, `privacy.html`) | Linked from that embed (`https://play-bound.com/terms.html` and `privacy.html`). Users read the real policy here. |
+| **Public policy files** (`terms.html` / `privacy.html`, or **plain `terms.txt` / `privacy.txt`**) | Linked from that embed (`https://play-bound.com/terms.html` and `privacy.html`). URLs stay `.html` even when the file on disk is `.txt` (served as `text/plain`). Users read the real policy here. |
 | **Optional:** `docs/TERMS.md`, `docs/PRIVACY.md` | Internal / repo-friendly copies. They are **not** what Discord serves; keep them aligned if you use them as source material. |
 
 ## 2. Bump version strings (force re-accept in Discord)
@@ -23,31 +23,33 @@ Pick **one** source of truth (first match wins at runtime):
 
 **Revert DB override:** Admin → Legal → **Clear DB override** (or `DELETE /api/admin/legal-policy`). The bot then uses `constants.js` again until you save new versions in the admin UI.
 
-## 3. Publish updated HTML (policy text)
+## 3. Publish updated policy text (HTML or plain text)
 
 Public URLs stay **`/terms.html`** and **`/privacy.html`** on whatever host serves your PlayBound static site.
 
+**Plain text (no HTML):** put **`terms.txt`** and **`privacy.txt`** next to each other under `PUBLIC_DIR` or under `LEGAL_CONTENT_DIR`. The bot serves them at the same `/terms.html` and `/privacy.html` routes with `Content-Type: text/plain`. If both `terms.html` and `terms.txt` exist in the same folder, **`.html` wins**.
+
 **A. Repository (typical for git-based deploys)**  
-Edit or replace:
+Edit Markdown sources (then run the web build — see `apps/web/README.md`):
 
-- `../lucht-applications/play-bound/terms.html`
-- `../lucht-applications/play-bound/privacy.html`
+- `apps/web/public/terms.md` → generated `apps/web/terms.html`
+- `apps/web/public/privacy.md` → generated `apps/web/privacy.html`
 
-(paths relative to this bot repo: sibling `lucht-applications/play-bound/`)
+Or drop plain **`terms.txt`** / **`privacy.txt`** next to the HTML in `apps/web/` if you are not using the Markdown pipeline.
 
 Deploy the site the same way you deploy today (CDN, static host, etc.).
 
 **B. Bot-hosted static (`PUBLIC_DIR`)**  
 If the Node process serves the marketing site via `PUBLIC_DIR` (see `.env.example`), you can:
 
-- Replace `terms.html` / `privacy.html` inside that folder on disk, **or**
+- Replace `terms.html` / `privacy.html` (or `.txt` versions) inside that folder on disk, **or**
 - **Admin → Legal → Publish HTML to site** (file pickers). Requires `PUBLIC_DIR` to be set and the bot to have write access to that directory.
 
 **C. Drop-in files without touching repo HTML**  
 Set optional env vars on the bot host (see `.env.example`):
 
-- **`LEGAL_CONTENT_DIR`** — folder containing `terms.html` and `privacy.html`, **or**
-- **`LEGAL_TERMS_FILE`** / **`LEGAL_PRIVACY_FILE`** — absolute or cwd-relative paths to each file.
+- **`LEGAL_CONTENT_DIR`** — folder containing `terms.html` / `privacy.html` and/or `terms.txt` / `privacy.txt`, **or**
+- **`LEGAL_TERMS_FILE`** / **`LEGAL_PRIVACY_FILE`** — absolute or cwd-relative paths to each file (`.html`, `.txt`, or `.md`).
 
 The HTTP app serves these **before** files under `PUBLIC_DIR` for `/terms.html` and `/privacy.html` when the request hits **this** Express server.
 
