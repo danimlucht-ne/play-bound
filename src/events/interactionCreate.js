@@ -3361,7 +3361,13 @@ if (interaction.isButton()) {
                 return interaction.reply({ content: result.content, ephemeral: true });
             }
             await recordFactionJoined(interaction.user.id).catch(() => {});
-            return interaction.reply({ content: result.content, ephemeral: true });
+            if (result.embeds && result.embeds.length) {
+                return interaction.reply({ embeds: result.embeds, ephemeral: true });
+            }
+            return interaction.reply({
+                content: result.content || result.joinHeadline || `✅ Joined **${joinName}**!`,
+                ephemeral: true,
+            });
         }
 
         if (fsub === 'leave') {
