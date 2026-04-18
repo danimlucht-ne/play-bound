@@ -252,7 +252,7 @@ Full tables lived in older README revisions; the **code** enforces rules in `lib
 
 ### Operations and hosting
 
-- **Go-live checklist:** `docs/GO_LIVE_CHECKLIST.md`
+- **Project checklist (ops, marketing site, legal):** `docs/GO_LIVE_CHECKLIST.md`
 - **Shutdown, kill switches, maintenance:** `docs/OPERATIONS_AND_SHUTDOWN.md`
 - **VM / process monitoring:** `docs/MONITORING.md`
 - **Self-hosting notes:** `docs/SELF_HOSTING.md`
