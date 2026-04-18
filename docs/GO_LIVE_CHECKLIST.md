@@ -6,6 +6,8 @@ Work through sections in order, or run **[parallel]** sections alongside others.
 
 **Already assumed:** PM2 is running the bot; you will switch Stripe **live** payment links when ready (not duplicated here).
 
+**Growth & power-admin polish (ordered backlog, pre–support volume):** **`docs/growth-and-admin-polish.md`**.
+
 ---
 
 ## 1. Environment & secrets

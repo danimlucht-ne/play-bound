@@ -49,6 +49,73 @@
   border-color: var(--accent);
   color: var(--accent);
 }
+.pb-dash-tabs button:focus-visible {
+  outline: 2px solid rgba(45, 212, 191, 0.85);
+  outline-offset: 2px;
+}
+.pb-dash-tab-tools {
+  display: flex;
+  justify-content: center;
+  margin: 0 0 0.75rem;
+}
+.pb-dash-tab-tools .btn-copy-dash {
+  font-family: inherit;
+  font-size: 0.72rem;
+  font-weight: 600;
+  padding: 0.32rem 0.65rem;
+  border-radius: 999px;
+  border: 1px dashed rgba(122, 143, 163, 0.55);
+  background: rgba(15, 20, 25, 0.65);
+  color: var(--muted);
+  cursor: pointer;
+  transition: color 0.15s ease, border-color 0.15s ease, background 0.15s ease;
+}
+.pb-dash-tab-tools .btn-copy-dash:hover {
+  color: var(--text);
+  border-color: rgba(45, 212, 191, 0.45);
+}
+.pb-dash-tab-tools .btn-copy-dash:focus-visible {
+  outline: 2px solid rgba(45, 212, 191, 0.85);
+  outline-offset: 2px;
+}
+.pb-dash-card--skeleton {
+  min-height: 118px;
+  pointer-events: none;
+}
+.pb-dash-skel {
+  height: 0.62rem;
+  border-radius: 6px;
+  margin-bottom: 0.48rem;
+  background: linear-gradient(
+    90deg,
+    rgba(36, 48, 64, 0.9) 0%,
+    rgba(255, 255, 255, 0.07) 45%,
+    rgba(36, 48, 64, 0.9) 90%
+  );
+  background-size: 220% 100%;
+  animation: pb-dash-skel-shimmer 1.15s ease-in-out infinite;
+}
+.pb-dash-skel--title {
+  height: 0.95rem;
+  width: 42%;
+  margin-bottom: 0.65rem;
+}
+.pb-dash-skel--short {
+  width: 58%;
+}
+@keyframes pb-dash-skel-shimmer {
+  0% {
+    background-position: 120% 0;
+  }
+  100% {
+    background-position: -120% 0;
+  }
+}
+.pb-dash-empty-hint {
+  font-size: 0.82rem;
+  margin-bottom: 0.65rem;
+  line-height: 1.45;
+}
 /* Keep in sync with index.html inline #pb-dash-detail-grid rules (child combinator + !important) */
 .pb-dash-tab-panels > .pb-dash-tab-panel:not(.active) {
   display: none !important;
