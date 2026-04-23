@@ -1,10 +1,12 @@
-# PlayBound — go-live checklist
+# PlayBound — project checklist (single source)
 
-**Live runbook:** use this file for pre-launch and production checks. Older Kiro task trees for go-live and related work live under **`docs/archive/kiro-specs/`** (historical); do not assume unchecked items there are still tracked only in those files—migrate any real follow-ups here or into your issue tracker.
+**Everything in one place:** production runbook (secrets, DB, Stripe, Discord, QA), **marketing site** (trust, SEO, a11y), and **legal / commercial** follow-ups. Older Kiro task trees live under **`docs/archive/kiro-specs/`** (historical); do not assume unchecked items there are still active—migrate anything real into this file or your issue tracker.
 
 Work through sections in order, or run **[parallel]** sections alongside others. Check boxes as you complete items.
 
 **Already assumed:** PM2 is running the bot; you will switch Stripe **live** payment links when ready (not duplicated here).
+
+**Growth & power-admin polish (ordered backlog, pre–support volume):** **`docs/growth-and-admin-polish.md`**.
 
 ---
 
@@ -209,4 +211,71 @@ The **`docs/archive/kiro-specs/go-live-hardening/tasks.md`** snapshot had mixed 
 - **Name That Tune / iTunes** (old task 20): if you rely on that game, spot-check preview URL validation and API failure handling.
 
 **Large unchecked items** in that snapshot (e.g. custom `ServerFaction` / admin content commands, full game modularization) are **product backlog**, not go-live blockers—promote any you still want into your issue tracker and drop the rest.
+
+---
+
+## 12. Marketing site — trust, positioning & conversion (play-bound.com)
+
+- [ ] **12.1** Homepage: one clear sentence — *who it is for* (server owners / moderators) and *what they get* (engagement, economy, games, Premium, etc.) without insider-only jargon up front.
+- [ ] **12.2** “Add to Discord” / invite CTA above the fold; **support server** or help link easy to find.
+- [ ] **12.3** Response expectation for support (email, Discord ticket, etc.) — even “we aim to reply within **X business days**.”
+- [ ] **12.4** Premium: plain-language **what Premium buys** vs free tier; link to Stripe or in-Discord purchase path; avoid ambiguous “unlimited” claims.
+- [ ] **12.5** Screenshots or short loop (GIF/video) of dashboard or key flows.
+- [ ] **12.6** (Optional) FAQ once the same handful of Discord questions repeat.
+
+---
+
+## 13. Marketing site — SEO & sharing
+
+- [ ] **13.1** Unique `<title>` + meta description per major HTML/route (home, terms, privacy, any landing variants).
+- [ ] **13.2** Open Graph + Twitter Card tags + `og:image` (1200×630) for Discord/social previews.
+- [ ] **13.3** Branded `404` page with link to home + support.
+- [ ] **13.4** Sitemap / `robots.txt` if not already wired for `apps/web` deploy.
+- [ ] **13.5** Canonical URLs if the same content is ever served on multiple paths.
+
+---
+
+## 14. Marketing site & dashboard — accessibility & UX
+
+- [ ] **14.1** Keyboard + focus pass on marketing pages and critical dashboard paths.
+- [ ] **14.2** Contrast on dark theme + cyan/teal accents (small text, chips, links).
+- [ ] **14.3** Forms / login: human-readable errors; no raw API traces to users.
+- [ ] **14.4** Legal docs readable on mobile (`apps/web` terms/privacy + `docs/PRIVACY.md` / `TERMS.md` — keep user-facing and repo legal in sync per **`UPDATING_LEGAL_DOCUMENTS.md`**).
+
+---
+
+## 15. Discord platform, pricing & operations (beyond sections 4–6)
+
+- [ ] **15.1** Discord Developer Policy / Terms of Service compliance review with lawyer (bots, monetization, intents, data you store).
+- [ ] **15.2** Premium / monetization: disclosure of renewal, cancellation, refund posture (align with Stripe + Discord expectations).
+- [ ] **15.3** Data you collect from guilds/users documented in Privacy (message content vs commands only vs IDs; retention).
+- [ ] **15.4** Permissions model documented for server owners (“why the bot asks for X”) — complements **section 5** above.
+- [ ] **15.5** Incident process if the bot is down or Discord API degrades — status channel or page if you promise uptime.
+- [ ] **15.6** Self-hosting vs hosted: clear commercial + liability boundary (`docs/SELF_HOSTING.md` vs SaaS).
+- [ ] **15.7** Public pricing strategy (show tiers vs “contact for enterprise”) — lawyer + Stripe rules.
+- [ ] **15.8** Tax / VAT posture if selling internationally (digital goods).
+- [ ] **15.9** Chargebacks / disputes: internal playbook + customer-facing policy tone.
+- [ ] **15.10** Support boundaries: included vs billable custom work; feature requests vs bug reports — set expectations.
+
+---
+
+## 16. Legal & insurance (lawyer checklist)
+
+- [ ] **16.1** Terms of Service (end users + server owners): acceptable use, termination, limitation of liability, warranty disclaimer.
+- [ ] **16.2** Privacy Policy: categories of data, purposes, retention, deletion, subprocessors (hosting, DB, Stripe, Discord, analytics).
+- [ ] **16.3** Children: if under-13 use is plausible, COPPA / parental consent or age gating — lawyer.
+- [ ] **16.4** IP: bot name, logo, dashboard UI — trademarks; DMCA / repeat infringer if UGC exists.
+- [ ] **16.5** Indemnities for misuse of the bot by a guild.
+- [ ] **16.6** Insurance (E&O / cyber) if revenue and attach rate justify it.
+- [ ] **16.7** Confirm whether user data ever touches third-party AI; disclose in terms if yes.
+
+---
+
+## 17. Analytics, monitoring polish & optional growth
+
+- [ ] **17.1** Privacy-respecting web analytics decision (if any) + cookie/consent if required.
+- [ ] **17.2** Error monitoring for bot + web: ensure alerts hit a human (`docs/MONITORING.md`); complements **§8**.
+- [ ] **17.3** (Optional) Short case study: one guild before/after (with permission).
+- [ ] **17.4** (Optional) Changelog or “What’s new” for community trust.
+- [ ] **17.5** (Optional) `security.txt` or security contact if you accept external reports.
 

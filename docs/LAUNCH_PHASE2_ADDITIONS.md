@@ -83,7 +83,7 @@ Shop item `type` values today: `consumable`, `badge`, `color`, `role` (see `mode
 
 | Topic | Location |
 |--------|----------|
-| Go-live runbook | `docs/GO_LIVE_CHECKLIST.md` |
+| Project checklist (ops + site + legal) | `docs/GO_LIVE_CHECKLIST.md` |
 | Shop seed / pricing anchor | `seed-shop.js` |
 | Platform game definitions | `lib/gamePlatform/registry.js` |
 | Season logic | `lib/factionSeasons.js` |

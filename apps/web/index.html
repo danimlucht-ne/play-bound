@@ -14,6 +14,23 @@
   <meta name="twitter:image" content="https://play-bound.com/playbound_banner.svg">
   <!-- Bot API (VM). CORS on the server should list every site origin you use (e.g. apex + www). -->
   <meta name="playbound-api" content="https://api.play-bound.com">
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "SoftwareApplication",
+    "name": "PlayBound",
+    "applicationCategory": "GameApplication",
+    "operatingSystem": "Discord",
+    "description": "Discord games, Credits economy, and structured faction challenges for community servers.",
+    "url": "https://play-bound.com/",
+    "offers": {
+      "@type": "Offer",
+      "price": "0",
+      "priceCurrency": "USD",
+      "description": "Free tier with optional Premium subscription"
+    }
+  }
+  </script>
   <link rel="stylesheet" href="onboarding-ui.css">
   <link rel="stylesheet" href="dashboard.css">
   <style>
@@ -322,6 +339,7 @@
       animation: pbHeroIn 0.22s ease-out forwards;
     }
     .pb-hero-el--0 { animation-delay: 0ms; }
+    .pb-hero-el--0b { animation-delay: 40ms; }
     .pb-hero-el--1 { animation-delay: 0.05s; }
     .pb-hero-el--2 { animation-delay: 0.09s; }
     .pb-hero-el--3 { animation-delay: 0.12s; }
@@ -471,6 +489,41 @@
       color: var(--accent); margin-bottom: 0.9rem;
       background: rgba(0, 206, 209, 0.09);
       border: 1px solid rgba(0, 206, 209, 0.18);
+    }
+    .hero__audience {
+      font-size: 0.9rem;
+      color: var(--muted);
+      max-width: 32rem;
+      margin: -0.35rem auto 0.85rem;
+      line-height: 1.5;
+    }
+    .hero__audience strong { color: var(--text); font-weight: 600; }
+    @media (min-width: 880px) {
+      .hero__audience { margin-left: 0; margin-right: 0; }
+    }
+    .faq-block {
+      max-width: 40rem;
+      margin: 0 auto;
+      text-align: left;
+    }
+    .faq-block details {
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      background: var(--surface-elevated);
+      padding: 0.65rem 0.85rem;
+      margin-bottom: 0.5rem;
+    }
+    .faq-block summary {
+      cursor: pointer;
+      font-weight: 700;
+      font-size: 0.88rem;
+      color: var(--text);
+    }
+    .faq-block p {
+      margin-top: 0.45rem;
+      font-size: 0.84rem;
+      color: var(--muted);
+      line-height: 1.55;
     }
     .hero h1 {
       font-size: clamp(2.3rem, 5.6vw, 3.3rem); font-weight: 800; letter-spacing: -0.05em;
@@ -1284,6 +1337,35 @@
       background: linear-gradient(135deg, rgba(0, 206, 209, 0.18), rgba(45, 212, 191, 0.12));
       border-color: rgba(45, 212, 191, 0.4); color: var(--text); box-shadow: 0 0 0 1px rgba(45, 212, 191, 0.12);
     }
+    .admin-tabbar button:focus-visible {
+      outline: 2px solid rgba(45, 212, 191, 0.88);
+      outline-offset: 2px;
+    }
+    .admin-guild-context {
+      font-size: 0.76rem;
+      margin-top: 0.45rem;
+      padding: 0.45rem 0.55rem;
+      border-radius: 8px;
+      background: rgba(0, 206, 209, 0.07);
+      border: 1px solid rgba(45, 212, 191, 0.22);
+      word-break: break-word;
+    }
+    .admin-guild-context code { color: var(--accent); }
+    .admin-nav-group--developer {
+      margin-top: 0.25rem;
+      padding-top: 0.75rem;
+      border-top: 1px dashed rgba(155, 135, 201, 0.42);
+    }
+    .admin-dev-hint {
+      display: block;
+      margin-top: 0.15rem;
+      font-size: 0.62rem;
+      font-weight: 700;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: #c4b5fd;
+      opacity: 0.95;
+    }
     .admin-drawer-content {
       min-width: 0; overflow-y: auto; padding: 1rem 1.25rem 1.5rem;
       background:
@@ -1843,6 +1925,7 @@
         <a href="#leaderboards" data-section-tab="leaderboards">Rankings</a>
         <a href="#growth" data-section-tab="growth">Grow</a>
         <a href="#premium" data-section-tab="premium">Premium</a>
+        <a href="#faq">FAQ</a>
         <a href="#dashboard" class="hidden" id="nav-dash-top">Dashboard</a>
       </nav>
       <div class="header-ctas">
@@ -1883,6 +1966,7 @@
     <div class="hero">
       <div class="hero__copy">
         <p class="hero__kicker pb-hero-el pb-hero-el--0">Discord game nights, done right</p>
+        <p class="hero__audience pb-hero-el pb-hero-el--0b">Built for <strong>server owners &amp; mods</strong> who want structured game nights, fair faction rankings, and less bot babysitting.</p>
         <h1 class="pb-hero-el pb-hero-el--1">Turn Your Discord Into Game Night</h1>
         <p class="subtitle pb-hero-el pb-hero-el--2">Play fast Discord games, earn Credits and Arena score, and join ranked faction challenges through the official /playgame lane.</p>
         <p class="hero-cta-line pb-hero-el pb-hero-el--3">Start playing in seconds — no setup required.</p>
@@ -2109,6 +2193,9 @@
           <button type="button" data-dash-tab="shop" aria-selected="false" aria-controls="pb-dash-tab-shop">Shop</button>
           <button type="button" data-dash-tab="premium" aria-selected="false" aria-controls="pb-dash-tab-premium">Premium</button>
         </div>
+        <div class="pb-dash-tab-tools">
+          <button type="button" class="btn-copy-dash" id="btn-copy-dash-link">Copy link to this tab</button>
+        </div>
         <div class="pb-dash-tab-panels" data-dash-panels>
           <div id="pb-dash-tab-stats" class="pb-dash-tab-panel active" role="tabpanel">
             <div id="pb-dash-stats"></div>
@@ -2309,6 +2396,44 @@
       </div>
       <p style="text-align:center;"><a id="prem-view" href="#" class="btn btn-secondary" target="_blank" rel="noopener">View Premium</a></p>
       <p style="text-align:center;font-size:0.74rem;color:var(--muted);margin-top:0.65rem;">Subscriptions: <span id="premium-links"><a href="#" id="prem-mo">Monthly</a> · <a href="#" id="prem-yr">Yearly</a></span></p>
+      <p class="muted" style="text-align:center;font-size:0.78rem;margin-top:0.5rem;max-width:36rem;margin-left:auto;margin-right:auto;line-height:1.5;">Free servers get the full game catalog and economy; Premium adds convenience and host power-ups (see cards above) — official faction standings still come from ranked challenges only.</p>
+    </div>
+  </section>
+
+  <section id="whats-new" class="section--tight pb-reveal" data-main-panel="play-hub">
+    <div class="container">
+      <h2>What&apos;s new on the site</h2>
+      <p class="section-lead">Ship notes for this dashboard and landing page live here; follow the support Discord for bot releases and patch notes.</p>
+      <ul class="muted" style="font-size:0.86rem;max-width:36rem;margin:0 auto;line-height:1.55;text-align:left;">
+        <li><strong>Dashboard:</strong> Sharable tab links, loading polish, and clearer empty states for new accounts.</li>
+        <li><strong>Admin drawer:</strong> Keyboard focus trap, Escape to close, and a persistent &ldquo;which server&rdquo; line while you work.</li>
+        <li><strong>Marketing:</strong> FAQ for mods, structured data for search, and a plainer &ldquo;who this is for&rdquo; line above the hero.</li>
+      </ul>
+    </div>
+  </section>
+
+  <section id="faq" class="section--tight pb-reveal" data-main-panel="play-hub">
+    <div class="container">
+      <h2>FAQ for server mods</h2>
+      <p class="section-lead">Short answers you can skim before you add the bot or turn on Premium.</p>
+      <div class="faq-block">
+        <details>
+          <summary>Does PlayBound read every message in my server?</summary>
+          <p>No. It responds to slash commands, buttons, and the game flows you start — not broad message logging. See the privacy policy for what the bot stores.</p>
+        </details>
+        <details>
+          <summary>What permissions does the bot need?</summary>
+          <p>Use the invite link from this site — it requests what the games and economy need (threads, roles, embeds, etc.). You can tighten scopes later, but missing permissions usually show up as a clear error in Discord.</p>
+        </details>
+        <details>
+          <summary>How do official faction rankings work?</summary>
+          <p>Structured ranked challenges feed the standings — not raw grind volume or casual games. Casual play still earns credits and fun, separate from the official board.</p>
+        </details>
+        <details>
+          <summary>What does Premium change?</summary>
+          <p>Premium is host and grinder convenience (multipliers, boosts, automation). It does not buy placement on the official faction leaderboard.</p>
+        </details>
+      </div>
     </div>
   </section>
 
@@ -2342,6 +2467,7 @@
       <div class="admin-drawer-server">
         <label for="admin-guild-select">Discord server</label>
         <select id="admin-guild-select" aria-label="Discord server"></select>
+        <p id="admin-guild-context" class="admin-guild-context muted" role="status" aria-live="polite">Pick a server — tools below apply to that guild only.</p>
       </div>
       <div class="admin-drawer-body">
         <aside class="admin-drawer-sidebar" aria-label="Admin navigation">
@@ -2375,8 +2501,8 @@
               <button type="button" role="tab" data-admin-tab="audit" aria-selected="false">Audit</button>
             </div>
           </div>
-          <div class="admin-nav-group">
-            <p class="admin-drawer-nav-label">System</p>
+          <div class="admin-nav-group admin-nav-group--developer">
+            <p class="admin-drawer-nav-label">System <span class="admin-dev-hint">Host / founder</span></p>
             <div class="admin-tabbar" role="tablist" aria-label="System sections">
               <button type="button" role="tab" data-admin-tab="legal" id="admin-tab-legal-btn" class="hidden" aria-selected="false">Legal</button>
               <button type="button" role="tab" data-admin-tab="logs" id="admin-tab-logs-btn" class="hidden" aria-selected="false">Logs</button>
@@ -2455,6 +2581,7 @@
 
   var myUserId = null;
   var lastFocusEl = null;
+  var adminFocusTrapCleanup = null;
 
   (function initSectionTabs() {
     var tabs = Array.prototype.slice.call(document.querySelectorAll('[data-section-tab]'));
@@ -3037,9 +3164,11 @@
     if (btn) btn.setAttribute('aria-expanded', 'true');
     var closeBtn = document.getElementById('admin-drawer-close');
     if (closeBtn) closeBtn.focus();
+    installAdminFocusTrap();
   }
 
   function closeAdminDrawer() {
+    if (adminFocusTrapCleanup) adminFocusTrapCleanup();
     stopAdminLogsPoll();
     var d = document.getElementById('admin-drawer');
     var btn = document.getElementById('btn-admin-panel');
@@ -3202,6 +3331,67 @@
   function getAdminGuildId() {
     var sel = document.getElementById('admin-guild-select');
     return sel && sel.value ? String(sel.value) : '';
+  }
+
+  function updateAdminGuildContext() {
+    var ctx = document.getElementById('admin-guild-context');
+    var sel = document.getElementById('admin-guild-select');
+    if (!ctx || !sel) return;
+    var id = sel.value;
+    if (!id) {
+      ctx.textContent = 'Pick a server — tools below apply to that guild only.';
+      return;
+    }
+    var name = adminState.guildNames[id] || 'Selected server';
+    ctx.innerHTML =
+      '<strong>Acting on:</strong> ' +
+      escapeHtml(name) +
+      ' <span class="muted">· id</span> <code>' +
+      escapeHtml(id) +
+      '</code>';
+  }
+
+  function getAdminDrawerFocusables() {
+    var panel = document.querySelector('#admin-drawer .admin-drawer-panel');
+    if (!panel) return [];
+    return Array.prototype.slice
+      .call(
+        panel.querySelectorAll(
+          'a[href]:not([disabled]), button:not([disabled]), textarea:not([disabled]), input:not([disabled]), select:not([disabled]), [tabindex]:not([tabindex="-1"])'
+        )
+      )
+      .filter(function (el) {
+        return el.offsetParent !== null || el.getClientRects().length > 0;
+      });
+  }
+
+  function installAdminFocusTrap() {
+    if (adminFocusTrapCleanup) adminFocusTrapCleanup();
+    var handler = function (ev) {
+      var d = document.getElementById('admin-drawer');
+      if (!d || !d.classList.contains('open')) return;
+      if (ev.key !== 'Tab') return;
+      var list = getAdminDrawerFocusables();
+      if (list.length === 0) return;
+      var first = list[0];
+      var last = list[list.length - 1];
+      if (ev.shiftKey) {
+        if (document.activeElement === first) {
+          ev.preventDefault();
+          last.focus();
+        }
+      } else {
+        if (document.activeElement === last) {
+          ev.preventDefault();
+          first.focus();
+        }
+      }
+    };
+    document.addEventListener('keydown', handler, true);
+    adminFocusTrapCleanup = function () {
+      document.removeEventListener('keydown', handler, true);
+      adminFocusTrapCleanup = null;
+    };
   }
 
   function adminMetric(label, val) {
@@ -4353,11 +4543,13 @@
           }).join('');
         sel.onchange = function () {
           setAdminPanelMessage('', false);
+          updateAdminGuildContext();
           switchAdminTab(adminState.tab, true);
         };
         if ((data.guilds || []).length === 1) {
           sel.value = data.guilds[0].id;
         }
+        updateAdminGuildContext();
         switchAdminTab('overview', true);
       });
     });
@@ -4365,6 +4557,25 @@
 
   document.getElementById('admin-drawer-close').addEventListener('click', closeAdminDrawer);
   document.getElementById('admin-drawer-backdrop').addEventListener('click', closeAdminDrawer);
+  document.getElementById('admin-drawer').addEventListener('keydown', function (ev) {
+    var d = document.getElementById('admin-drawer');
+    if (!d || !d.classList.contains('open')) return;
+    var t = ev.target;
+    if (!t || !t.getAttribute || !t.getAttribute('data-admin-tab')) return;
+    if (ev.key !== 'ArrowDown' && ev.key !== 'ArrowUp' && ev.key !== 'ArrowRight' && ev.key !== 'ArrowLeft') return;
+    var tabs = Array.prototype.slice
+      .call(document.querySelectorAll('#admin-drawer [data-admin-tab]'))
+      .filter(function (b) {
+        return b.offsetParent !== null && !b.classList.contains('hidden');
+      });
+    var i = tabs.indexOf(t);
+    if (i < 0) return;
+    ev.preventDefault();
+    var next = i;
+    if (ev.key === 'ArrowDown' || ev.key === 'ArrowRight') next = (i + 1) % tabs.length;
+    else next = (i - 1 + tabs.length) % tabs.length;
+    tabs[next].focus();
+  });
   document.addEventListener('keydown', function (ev) {
     if (ev.key !== 'Escape') return;
     if (document.getElementById('admin-drawer').classList.contains('open')) {

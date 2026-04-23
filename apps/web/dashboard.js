@@ -69,6 +69,17 @@
   }
 
   /* ── Error + retry helper ── */
+  function dashCardSkeleton() {
+    return (
+      '<div class="pb-dash-card pb-dash-card--skeleton" aria-hidden="true">' +
+        '<div class="pb-dash-skel pb-dash-skel--title"></div>' +
+        '<div class="pb-dash-skel"></div>' +
+        '<div class="pb-dash-skel"></div>' +
+        '<div class="pb-dash-skel pb-dash-skel--short"></div>' +
+      '</div>'
+    );
+  }
+
   function errorRetryHtml(msg, retryFn) {
     var id = 'pb-retry-' + Math.random().toString(36).slice(2, 8);
     setTimeout(function () {
@@ -82,7 +93,7 @@
   async function loadStatsCard() {
     var el = document.getElementById('pb-dash-stats');
     if (!el) return;
-    el.innerHTML = '<p class="muted">Loading stats…</p>';
+    el.innerHTML = dashCardSkeleton();
     try {
       var r = await apiFetch('/api/me/stats');
       if (!r.ok) throw new Error('stats_failed');
@@ -101,9 +112,16 @@
         var line = d.serverCount > 0 ? statsFormat(n, d.serverCount) : esc(String(n)) + ' wins';
         return '<div class="pb-dash-stat-row"><span>' + esc(g.label) + '</span><span>' + line + '</span></div>';
       }).join('');
+      var totalW = Number(d.totalGamesWon || 0);
+      var sc = Number(d.serverCount || 0);
+      var emptyHint =
+        totalW === 0 && sc === 0
+          ? '<p class="muted pb-dash-empty-hint">No wins recorded yet — jump into a game in Discord, then refresh this tab. When you manage servers, open <strong>Admin</strong> from your account menu for server tools.</p>'
+          : '';
       el.innerHTML =
         '<div class="pb-dash-card">' +
           '<h3>🏆 Game Stats</h3>' +
+          emptyHint +
           '<div class="pb-dash-stat-total">Total games won: <strong>' + esc(String(d.totalGamesWon)) + '</strong></div>' +
           rows +
         '</div>';
@@ -116,7 +134,7 @@
   async function loadFactionCard() {
     var el = document.getElementById('pb-dash-faction');
     if (!el) return;
-    el.innerHTML = '<p class="muted">Loading faction…</p>';
+    el.innerHTML = dashCardSkeleton();
     try {
       var r = await apiFetch('/api/me/faction');
       if (!r.ok) throw new Error('faction_failed');
@@ -160,7 +178,7 @@
   async function loadAchievements() {
     var el = document.getElementById('pb-dash-achievements');
     if (!el) return;
-    el.innerHTML = '<p class="muted">Loading achievements…</p>';
+    el.innerHTML = dashCardSkeleton();
     try {
       var r = await apiFetch('/api/me/achievements');
       if (!r.ok) throw new Error('ach_failed');
@@ -185,7 +203,7 @@
   async function loadShopBrowser() {
     var el = document.getElementById('pb-dash-shop');
     if (!el) return;
-    el.innerHTML = '<p class="muted">Loading shop…</p>';
+    el.innerHTML = dashCardSkeleton();
     try {
       var url = '/api/shop' + (shopGuildId ? '?guildId=' + encodeURIComponent(shopGuildId) : '');
       var r = await apiFetch(url);
@@ -411,6 +429,31 @@
         } catch (e) { /* ignore */ }
       });
     });
+    var copyL = document.getElementById('btn-copy-dash-link');
+    if (copyL && !copyL.dataset.pbInit) {
+      copyL.dataset.pbInit = '1';
+      copyL.addEventListener('click', function () {
+        var tab = dashTabCurrent || 'stats';
+        var hash = tab === 'stats' ? '#dashboard' : '#dashboard-' + tab;
+        var url = '';
+        try {
+          url = window.location.origin + window.location.pathname + window.location.search + hash;
+        } catch (e2) {
+          url = hash;
+        }
+        function done(ok) {
+          copyL.textContent = ok ? 'Copied!' : 'Copy failed';
+          setTimeout(function () {
+            copyL.textContent = 'Copy link to this tab';
+          }, 2000);
+        }
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+          navigator.clipboard.writeText(url).then(function () { done(true); }).catch(function () { done(false); });
+        } else {
+          done(false);
+        }
+      });
+    }
     if (!window.__pbDashResizeBound) {
       window.__pbDashResizeBound = 1;
       window.addEventListener('resize', function () {
