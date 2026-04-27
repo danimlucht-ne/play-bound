@@ -79,7 +79,8 @@ const UserSchema = new mongoose.Schema({
         tuneWins: { type: Number, default: 0 },
         captionWins: { type: Number, default: 0 },
         sprintWins: { type: Number, default: 0 },
-        guessWins: { type: Number, default: 0 }
+        guessWins: { type: Number, default: 0 },
+        mastermindWins: { type: Number, default: 0 }
     }
 });
 

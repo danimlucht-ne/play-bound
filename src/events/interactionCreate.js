@@ -219,6 +219,7 @@ const onboardingDiscord = require('../../lib/onboardingDiscord');
 const triviaGame = require('../../games/trivia');
 const serverdleGame = require('../../games/serverdle');
 const guessthenumberGame = require('../../games/guessthenumber');
+const mastermindGame = require('../../games/mastermind');
 const platformPlay = require('../../games/platformPlay');
 const spellingBeeGame = require('../../games/spellingbee');
 const tournamentGame = require('../../games/tournament');
@@ -753,6 +754,7 @@ function registerInteractionCreate(client, deps) {
 
     if (await serverdleGame.handleInteraction(interaction, client)) return;
     if (await guessthenumberGame.handleInteraction(interaction, client)) return;
+    if (await mastermindGame.handleInteraction(interaction, client)) return;
     if (await platformPlay.handlePlatformButton(interaction, client)) return;
     if (await spellingBeeGame.handleInteraction(interaction, client)) return;
 
@@ -1393,6 +1395,7 @@ if (interaction.isButton()) {
                     const dbGame = await endActiveGame(id, client);
                     if (dbGame) {
                         guessthenumberGame.forceEnd(client, id);
+                        mastermindGame.forceEnd(client, id);
                         spellingBeeGame.forceEnd(client, id);
                         serverdleGame.forceEnd(client, id);
                         triviaGame.forceEnd(client, id);
@@ -1576,11 +1579,12 @@ if (interaction.isButton()) {
         return;
     }
 
-    const adminCommands = ['set_announcement_channel', 'set_announce_everyone', 'set_automated_posts', 'set_welcome_channel', 'add_welcome_message', 'remove_welcome_message', 'list_welcome_messages', 'set_birthday_channel', 'add_birthday_message', 'remove_birthday_message', 'list_birthday_messages', 'set_achievement_channel', 'set_leaderboard_channel', 'set_leaderboard_cadence', 'set_faction_reminder_channel', 'set_faction_victory_role', 'set_faction_challenge_defaults', 'set_faction_ranked_rules', 'set_story_channel', 'set_member_log_channel', 'story_export', 'set_manager_role', 'set_member_game_hosts', 'set_auto_role', 'remove_auto_role', 'sync_auto_role', 'strip_role', 'schedule_announcement', 'adjustpoints', 'add_redirect', 'remove_redirect', 'endgame', 'wipe_leaderboard', 'giveaway', 'guessthenumber', 'playgame', 'startserverdle', 'trivia', 'triviasprint', 'namethattune', 'spellingbee', 'moviequotes', 'caption', 'unscramble', 'leaderboard', 'set_role_reward', 'achievement', 'tournament', 'faction_role_link', 'faction_rename', 'faction_emoji'];
+    const adminCommands = ['set_announcement_channel', 'set_announce_everyone', 'set_automated_posts', 'set_welcome_channel', 'add_welcome_message', 'remove_welcome_message', 'list_welcome_messages', 'set_birthday_channel', 'add_birthday_message', 'remove_birthday_message', 'list_birthday_messages', 'set_achievement_channel', 'set_leaderboard_channel', 'set_leaderboard_cadence', 'set_faction_reminder_channel', 'set_faction_victory_role', 'set_faction_challenge_defaults', 'set_faction_ranked_rules', 'set_story_channel', 'set_member_log_channel', 'story_export', 'set_manager_role', 'set_member_game_hosts', 'set_auto_role', 'remove_auto_role', 'sync_auto_role', 'strip_role', 'schedule_announcement', 'adjustpoints', 'add_redirect', 'remove_redirect', 'endgame', 'wipe_leaderboard', 'giveaway', 'guessthenumber', 'mastermind', 'playgame', 'startserverdle', 'trivia', 'triviasprint', 'namethattune', 'spellingbee', 'moviequotes', 'caption', 'unscramble', 'leaderboard', 'set_role_reward', 'achievement', 'tournament', 'faction_role_link', 'faction_rename', 'faction_emoji'];
     /** When `allowMemberHostedGames` is on, regular members may start these (spam/abuse risk — use with channel slowmode). */
     const MEMBER_HOSTABLE_GAME_COMMANDS = [
         'giveaway',
         'guessthenumber',
+        'mastermind',
         'playgame',
         'startserverdle',
         'trivia',
@@ -1642,7 +1646,7 @@ if (interaction.isButton()) {
             c.allowMemberHostedGames = enabled;
         });
         const list =
-            '`/guessthenumber` `/playgame` `/trivia` `/triviasprint` `/unscramble` `/caption` `/giveaway` `/startserverdle` `/namethattune` `/spellingbee` `/moviequotes`';
+            '`/guessthenumber` `/mastermind` `/playgame` `/trivia` `/triviasprint` `/unscramble` `/caption` `/giveaway` `/startserverdle` `/namethattune` `/spellingbee` `/moviequotes`';
         await interaction.reply({
             content: enabled
                 ? `✅ **Any member** can start: ${list}\nOther admin commands still need **Administrator** or **Bot Manager**.`
@@ -3057,7 +3061,7 @@ if (interaction.isButton()) {
                 {
                     name: '🎛️ Host your own (casual)',
                     value:
-                        '**`/trivia`**, **`/triviasprint`**, **`/unscramble`**, **`/moviequotes`**, **`/namethattune`**, **`/caption`**, **`/spellingbee`**, **`/guessthenumber`**, **`/startserverdle`**, giveaways, etc. — **hosted** games for fun & server events.\n\nThey **do not** add points to **ranked** wars; casual / **unranked** challenges may still count them if configured.',
+                        '**`/trivia`**, **`/triviasprint`**, **`/unscramble`**, **`/moviequotes`**, **`/namethattune`**, **`/caption`**, **`/spellingbee`**, **`/guessthenumber`**, **`/mastermind`**, **`/startserverdle`**, giveaways, etc. — **hosted** games for fun & server events.\n\nThey **do not** add points to **ranked** wars; casual / **unranked** challenges may still count them if configured.',
                 },
                        { name: '⚔️ Duels & factions', value: '`/duel` — **1v1 trivia** (hosted). **Global faction** (`/faction join`).\n\n**`/factions`** = **Official Faction Rankings** (**ranked** war match points only). **`/faction server`** = server activity.\n\n**`/faction_challenge`** — **ranked** = **/playgame** only for scoring; **unranked** = local, hosted allowed if filter says so. **Premium** + manager/leader to create. `/set_faction_challenge_defaults`, `/set_faction_ranked_rules`, `/set_faction_leader_role`. **2 duels + 1 royale**/UTC day. `/faction_recruit` · `/leaderboard_history`.' },
                        { name: '📣 Grow', value: '`/invite` + `/invites`\n\nAdmin `/claim_referral` in new servers · `/invite_leaderboard`.' },
@@ -3123,6 +3127,7 @@ if (interaction.isButton()) {
                 gameEnded = true;
                 // Also try to end it in memory if it exists
                 guessthenumberGame.forceEnd(client, id);
+                mastermindGame.forceEnd(client, id);
                 spellingBeeGame.forceEnd(client, id);
                 serverdleGame.forceEnd(client, id);
                 triviaGame.forceEnd(client, id);
@@ -3361,7 +3366,13 @@ if (interaction.isButton()) {
                 return interaction.reply({ content: result.content, ephemeral: true });
             }
             await recordFactionJoined(interaction.user.id).catch(() => {});
-            return interaction.reply({ content: result.content, ephemeral: true });
+            if (result.embeds && result.embeds.length) {
+                return interaction.reply({ embeds: result.embeds, ephemeral: true });
+            }
+            return interaction.reply({
+                content: result.content || result.joinHeadline || `✅ Joined **${joinName}**!`,
+                ephemeral: true,
+            });
         }
 
         if (fsub === 'leave') {

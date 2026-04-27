@@ -74,13 +74,19 @@ async function generateServerdleImage(guesses) {
             if (guess) {
                 const char = guess.word[col];
                 const emoji = [...guess.emojis][col];
-
-                if (emoji === '????') ctx.fillStyle = '#538d4e';
-                else if (emoji === '????') ctx.fillStyle = '#b59f3b';
-                else ctx.fillStyle = '#3a3a3c';
+                const tile = emoji?.codePointAt(0);
+                // Green / yellow: dark Wordle-style tiles + white letters. Absent (⬜): light tile + dark
+                // letters so the board matches how ⬜ reads in the text line (light square, not dark gray).
+                let letterColor = '#ffffff';
+                if (tile === 0x1f7e9) ctx.fillStyle = '#538d4e';
+                else if (tile === 0x1f7e8) ctx.fillStyle = '#b59f3b';
+                else {
+                    ctx.fillStyle = '#d3d6da';
+                    letterColor = '#121213';
+                }
 
                 ctx.fillRect(x, y, tileSize, tileSize);
-                ctx.fillStyle = '#ffffff';
+                ctx.fillStyle = letterColor;
                 ctx.font = 'bold 38px Arial';
                 ctx.textAlign = 'center';
                 ctx.textBaseline = 'middle';
@@ -379,12 +385,6 @@ module.exports = {
                 const finalEmojis = res.join('');
                 p.guesses.push({ word: guess, emojis: finalEmojis });
 
-                const guessLines = p.guesses
-                    .map((g, idx) => `**${idx + 1}.** \`${g.word}\`  ${[...g.emojis].join(' ')}`)
-                    .join('\n');
-                const legend =
-                    '*🟩 = correct letter & spot · 🟨 = in the word, wrong spot · ⬜ = not in the word (gray tiles)*';
-
                 const buffer = await generateServerdleImage(p.guesses);
                 const attachment = new AttachmentBuilder(buffer, { name: 'serverdle.png' });
                 const embed = new EmbedBuilder().setTitle('🟩 Serverdle').setColor('#121213').setImage('attachment://serverdle.png');
@@ -398,12 +398,14 @@ module.exports = {
                     p.won = true;
                     activeServerdle.winners.push({ userId: uid, guesses: p.guesses.length, timestamp: Date.now() });
                     if (p.guesses.length <= 3) awardAchievement(client, interaction.guildId, null, uid, "WORDLE_WIZARD");
-                    embed.setDescription(`${guessLines}\n\n🎉 **SOLVED!** in ${p.guesses.length} guesses!\n\n${legend}`);
+                    embed.setDescription(`🎉 **Solved** in **${p.guesses.length}** guesses!`);
                     client.channels.cache.get(activeServerdle.channelId)?.send(`🎉 <@${uid}> solved it!`);
                 } else if (p.guesses.length >= 6) {
-                    embed.setDescription(`${guessLines}\n\n❌ **Out of guesses.** The word was **${w}**\n\n${legend}`);
+                    embed.setDescription(`❌ **Out of guesses.** The word was **${w}**`);
                 } else {
-                    embed.setDescription(`${guessLines}\n\n${legend}`);
+                    embed.setFooter({
+                        text: '🟩 correct spot · 🟨 wrong spot · light tile = not in word',
+                    });
                 }
 
                 const done = p.won || p.guesses.length >= 6;
@@ -419,7 +421,10 @@ module.exports = {
                 }
                 p.lastInteraction = interaction;
 
-                updateActiveGame(activeServerdle.threadId, state => {
+                updateActiveGame(activeServerdle.threadId, (state) => {
+                    if (!state || typeof state !== 'object') return;
+                    if (!state.players) state.players = {};
+                    if (!Array.isArray(state.winners)) state.winners = [];
                     state.players[uid] = { guesses: p.guesses, won: p.won };
                     state.winners = activeServerdle.winners;
                 });

@@ -1,6 +1,6 @@
 'use strict';
 
-require('dotenv').config();
+require('dotenv').config({ path: process.env.DOTENV_CONFIG_PATH || '.env' });
 require('./lib/processLogCapture').install();
 const { playboundDebugEnabled } = require('./lib/playboundDebug');
 
