@@ -1,4 +1,4 @@
-require('dotenv').config();
+require('dotenv').config({ path: process.env.DOTENV_CONFIG_PATH || '.env' });
 const { REST, Routes, SlashCommandBuilder, PermissionFlagsBits } = require('discord.js');
 const { MAX_POINTS_PER_PLACEMENT } = require('./lib/utils');
 const { GAME_REGISTRY, PLATFORM_GAME_TAGS } = require('./lib/gamePlatform/registry');
@@ -93,6 +93,7 @@ const commands = [
                 { name: 'Trivia Sprint', value: 'triviasprint' },
                 { name: 'Serverdle', value: 'serverdle' },
                 { name: 'Guess the Number', value: 'guessthenumber' },
+                { name: 'Mastermind', value: 'mastermind' },
                 { name: 'TV & Movie Quotes', value: 'moviequotes' },
                 { name: 'Unscramble', value: 'unscramble' },
                 { name: 'Caption', value: 'caption' },
@@ -191,6 +192,58 @@ const commands = [
         .addStringOption(o => o.setName('points').setDescription('Winner points (default 25). Everyone who guessed gets +1 participation.'))
         .addIntegerOption(o => o.setName('delay_hrs').setDescription(HOST_DELAY_HRS_OPT_DESC))
         .addIntegerOption(o => o.setName('delay_days').setDescription(HOST_DELAY_DAYS_OPT_DESC)),
+    new SlashCommandBuilder().setName('mastermind').setDescription('Crack a code on a Wordle-style board — numbers, letters, or color pegs; first solve wins.')
+        .addStringOption((o) =>
+            o
+                .setName('peg_mode')
+                .setDescription('How pegs look on the board (required — avoids accidentally defaulting to numbers)')
+                .setRequired(true)
+                .addChoices(
+                    { name: 'Numbers (1–N)', value: 'numbers' },
+                    { name: 'Letters (A…)', value: 'letters' },
+                    { name: 'Colors (type digits; board shows swatches)', value: 'colors' },
+                ),
+        )
+        .addStringOption((o) =>
+            o
+                .setName('difficulty')
+                .setDescription('Easy: 6 values, no repeats in the code. Hard: 5–8 values (see colors), repeats may appear.')
+                .addChoices(
+                    { name: 'Easy — 6 options, no repeats in code', value: 'easy' },
+                    { name: 'Hard — up to 8 options, full complexity', value: 'hard' },
+                ),
+        )
+        .addIntegerOption(o =>
+            o
+                .setName('duration')
+                .setDescription(HOST_GAME_DURATION_MINUTES_DESC)
+                .setMinValue(5)
+                .setMaxValue(720),
+        )
+        .addIntegerOption(o =>
+            o.setName('code_length').setDescription('Positions (default 5)').setMinValue(4).setMaxValue(6),
+        )
+        .addIntegerOption(o =>
+            o
+                .setName('colors')
+                .setDescription('How many different values 1…N (omit = 6; needs ≤8 color swatches).')
+                .addChoices(
+                    { name: '5', value: 5 },
+                    { name: '6 (default)', value: 6 },
+                    { name: '7', value: 7 },
+                    { name: '8', value: 8 },
+                ),
+        )
+        .addStringOption(o =>
+            o
+                .setName('custom_code')
+                .setDescription('Optional host secret: digits 1–N, or letters A… (matches peg_mode). Omit = random.'),
+        )
+        .addStringOption(o => o.setName('thread_name').setDescription(THREAD_NAME_OPT_DESC))
+        .addStringOption(o => o.setName('points').setDescription('Winner points (default 25). Guessers get +1 participation.'))
+        .addIntegerOption(o => o.setName('delay_hrs').setDescription(HOST_DELAY_HRS_OPT_DESC))
+        .addIntegerOption(o => o.setName('delay_days').setDescription(HOST_DELAY_DAYS_OPT_DESC))
+        .addIntegerOption(o => o.setName('slow_mode').setDescription('Thread slowmode in seconds (optional).')),
     new SlashCommandBuilder().setName('set_member_game_hosts').setDescription('Let any member start game commands (not only Manager/Admin).')
         .addBooleanOption(o => o.setName('enabled').setDescription('On = anyone can host listed games').setRequired(true)), 
     new SlashCommandBuilder().setName('startserverdle').setDescription('Timed Wordle Replica.')
@@ -361,6 +414,7 @@ const commands = [
                     { name: 'Trivia Sprint', value: 'triviasprint' },
                     { name: 'Serverdle', value: 'serverdle' },
                     { name: 'Guess the Number', value: 'guessthenumber' },
+                    { name: 'Mastermind', value: 'mastermind' },
                     { name: 'TV & Movie Quotes', value: 'moviequotes' },
                     { name: 'Unscramble', value: 'unscramble' },
                     { name: 'Caption', value: 'caption' },
@@ -379,6 +433,7 @@ const commands = [
                     { name: 'Trivia Sprint', value: 'triviasprint' },
                     { name: 'Serverdle', value: 'serverdle' },
                     { name: 'Guess the Number', value: 'guessthenumber' },
+                    { name: 'Mastermind', value: 'mastermind' },
                     { name: 'TV & Movie Quotes', value: 'moviequotes' },
                     { name: 'Unscramble', value: 'unscramble' },
                     { name: 'Caption', value: 'caption' },

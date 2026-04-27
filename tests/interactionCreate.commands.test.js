@@ -49,6 +49,7 @@ const onboardingDiscordPath = repoPath('lib', 'onboardingDiscord.js');
 const triviaPath = repoPath('games', 'trivia.js');
 const serverdlePath = repoPath('games', 'serverdle.js');
 const guessNumberPath = repoPath('games', 'guessthenumber.js');
+const mastermindPath = repoPath('games', 'mastermind.js');
 const platformPlayPath = repoPath('games', 'platformPlay.js');
 const spellingBeePath = repoPath('games', 'spellingbee.js');
 const tournamentPath = repoPath('games', 'tournament.js');
@@ -415,6 +416,10 @@ function loadInteractionCreate(overrides = {}) {
                 },
             [guessNumberPath]:
                 overrides.guessthenumber || {
+                    handleInteraction: async () => false,
+                },
+            [mastermindPath]:
+                overrides.mastermind || {
                     handleInteraction: async () => false,
                 },
             [platformPlayPath]:

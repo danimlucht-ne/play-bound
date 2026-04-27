@@ -1,4 +1,4 @@
-require('dotenv').config();
+require('dotenv').config({ path: process.env.DOTENV_CONFIG_PATH || '.env' });
 const { REST, Routes } = require('discord.js');
 
 const rest = new REST({ version: '10' }).setToken(process.env.DISCORD_TOKEN);

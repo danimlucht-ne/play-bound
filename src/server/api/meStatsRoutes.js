@@ -38,6 +38,7 @@ function createMeStatsRouter() {
                                 caption: { $sum: '$stats.captionWins' },
                                 sprint: { $sum: '$stats.sprintWins' },
                                 guess: { $sum: '$stats.guessWins' },
+                                mastermind: { $sum: '$stats.mastermindWins' },
                             },
                         },
                     ]);
@@ -72,6 +73,7 @@ function createMeStatsRouter() {
                             caption: Math.round(Number(agg?.caption || 0)),
                             sprint: Math.round(Number(agg?.sprint || 0)),
                             guess: Math.round(Number(agg?.guess || 0)),
+                            mastermind: Math.round(Number(agg?.mastermind || 0)),
                         },
                         serverCount: Math.round(Number(serverAgg?.n || 0)),
                         cachedAt: new Date().toISOString(),
