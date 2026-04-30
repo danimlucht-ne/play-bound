@@ -294,6 +294,11 @@ function createHttpApp(botCtx) {
     app.use('/api/admin', loadSessionMiddleware, createAdminPanelRouter());
     app.use('/api', createPublicApiRouter());
 
+    const { Sentry, sentryEnabled } = require('../../lib/instrument');
+    if (sentryEnabled) {
+        Sentry.setupExpressErrorHandler(app);
+    }
+
     return app;
 }
 

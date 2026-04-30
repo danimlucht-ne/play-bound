@@ -12,6 +12,7 @@
   },
   "scripts": {
     "start": "node index.js",
+    "sentry:ping": "node scripts/sentry-ping.js",
     "web:build": "npm run build -w play-bound-site",
     "web:test:static": "npm run test:static -w play-bound-site",
     "web:test:e2e": "npm run test:e2e -w play-bound-site",
@@ -27,6 +28,8 @@
     "check:syntax:ops": "node --check lib/botLifecycle.js && node --check lib/commandGate.js && node --check lib/interruptedGameCompensation.js && node --check lib/maintenanceBroadcast.js && node --check lib/maintenanceScheduling.js && node --check lib/opsEventLog.js && node --check lib/opsPresence.js"
   },
   "dependencies": {
+    "@sentry/node": "^8.55.0",
+    "@sentry/profiling-node": "^8.55.0",
     "@discordjs/voice": "^0.19.0",
     "@napi-rs/canvas": "^0.1.97",
     "@snazzah/davey": "^0.1.11",

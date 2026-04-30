@@ -1,6 +1,7 @@
 'use strict';
 
 require('dotenv').config({ path: process.env.DOTENV_CONFIG_PATH || '.env' });
+require('./lib/instrument');
 require('./lib/processLogCapture').install();
 const { playboundDebugEnabled } = require('./lib/playboundDebug');
 
@@ -82,6 +83,11 @@ async function main() {
         partials: [Partials.Message, Partials.Channel, Partials.Reaction, Partials.GuildMember],
     });
 
+    const { Sentry, sentryEnabled } = require('./lib/instrument');
+    if (sentryEnabled && Sentry) {
+        client.on('error', (err) => Sentry.captureException(err));
+    }
+
     const { scheduleGame, resumeScheduledGames } = createScheduleHelpers(client, state);
     const triggers = createGameEndTriggers(client, state);
 
@@ -115,7 +121,16 @@ async function main() {
     await client.login(process.env.DISCORD_TOKEN);
 }
 
-main().catch((err) => {
+main().catch(async (err) => {
     console.error('[BOT STARTUP] Fatal error:', err);
+    try {
+        const { Sentry, sentryEnabled } = require('./lib/instrument');
+        if (sentryEnabled && Sentry) {
+            Sentry.captureException(err);
+            await Sentry.flush(2000);
+        }
+    } catch (_) {
+        /* ignore */
+    }
     process.exit(1);
 });
