@@ -99,6 +99,17 @@ function makeStepSender(interaction, session) {
 
 const sessions = new Map();
 
+/** Sweep stale sessions every 5 minutes. Sessions older than 30 min are abandoned. */
+const SESSION_MAX_AGE_MS = 30 * 60 * 1000;
+setInterval(() => {
+    const cutoff = Date.now() - SESSION_MAX_AGE_MS;
+    for (const [id, s] of sessions) {
+        if ((s._createdAt || 0) < cutoff) {
+            sessions.delete(id);
+        }
+    }
+}, 5 * 60 * 1000).unref();
+
 function newSessionId() {
     return crypto.randomBytes(5).toString('hex');
 }
@@ -573,6 +584,7 @@ async function launchPlatformGameThread({ interaction, client, tag, threadName: 
         threadless,
         countsForPoints: dailyPlay.countsForPoints,
         isWarSession,
+        _createdAt: Date.now(),
     };
     sessions.set(session.id, session);
 
